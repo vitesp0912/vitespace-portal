@@ -1,0 +1,179 @@
+export type WorkItemStatus =
+  | "completed"
+  | "in_progress"
+  | "upcoming"
+  | "awaiting_client";
+
+export type ProjectStatus = "on_track" | "at_risk" | "blocked" | "completed";
+
+export type RequestStatus =
+  | "draft"
+  | "under_review"
+  | "approved"
+  | "rejected"
+  | "in_progress"
+  | "completed";
+
+export type ApprovalStatus = "pending" | "approved" | "changes_requested";
+
+export type InvoiceStatus = "pending" | "paid" | "overdue";
+
+export type RoadmapStatus = "committed" | "in_progress" | "planned" | "proposed";
+
+export type DocumentCategory =
+  | "contracts"
+  | "invoices"
+  | "seo_reports"
+  | "property_data"
+  | "creative_assets"
+  | "project_documents";
+
+export type ConversationContext =
+  | "project"
+  | "work_item"
+  | "change_request"
+  | "invoice"
+  | "document";
+
+export type ActionItemType =
+  | "approval"
+  | "data_required"
+  | "change_request"
+  | "payment";
+
+export interface Client {
+  id: string;
+  name: string;
+  company: string;
+  email: string;
+  avatar?: string;
+  monthlyRetainer: number;
+  status: "active" | "paused" | "completed";
+  projectStatus: ProjectStatus;
+  projectName: string;
+  lastUpdatedAt: string;
+}
+
+export interface WorkItem {
+  id: string;
+  clientId: string;
+  title: string;
+  status: WorkItemStatus;
+  project: string;
+  description?: string;
+  stages?: string[];
+  currentStage?: number;
+  progress?: number;
+  completedAt?: string;
+  dueDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActionItem {
+  id: string;
+  clientId: string;
+  title: string;
+  type: ActionItemType;
+  linkedEntityId?: string;
+  priority: "high" | "normal";
+  requestedAt: string;
+}
+
+export interface ProgressArea {
+  id: string;
+  clientId: string;
+  label: string;
+  value: number;
+  sortOrder: number;
+}
+
+export interface ChangeRequest {
+  id: string;
+  clientId: string;
+  number: string;
+  title: string;
+  description: string;
+  project: string;
+  status: RequestStatus;
+  requestedBy: string;
+  requestedAt: string;
+  estimatedHours?: number;
+  additionalCost?: number;
+  priority: "normal" | "high";
+}
+
+export interface Approval {
+  id: string;
+  clientId: string;
+  title: string;
+  description: string;
+  status: ApprovalStatus;
+  items: string[];
+  requestedAt: string;
+  dueDate?: string;
+}
+
+export interface Invoice {
+  id: string;
+  clientId: string;
+  number: string;
+  title: string;
+  amount: number;
+  issuedAt: string;
+  dueAt: string;
+  paidAt?: string;
+  status: InvoiceStatus;
+}
+
+export interface Document {
+  id: string;
+  clientId: string;
+  name: string;
+  category: DocumentCategory;
+  uploadedAt: string;
+  size: string;
+  project?: string;
+  fileUrl?: string;
+}
+
+export interface Message {
+  id: string;
+  clientId: string;
+  sender: "client" | "vitespace";
+  senderName: string;
+  content: string;
+  timestamp: string;
+  context: ConversationContext;
+  contextLabel: string;
+  contextHref?: string;
+}
+
+export interface RoadmapItem {
+  id: string;
+  clientId: string;
+  title: string;
+  category: "website" | "seo" | "other";
+  status: RoadmapStatus;
+  month: string;
+}
+
+export interface Notification {
+  id: string;
+  clientId: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  href: string;
+}
+
+/** Computed dashboard stats for admin client list */
+export interface ClientDashboardStats {
+  awaitingClient: number;
+  openRequests: number;
+  pendingInvoices: number;
+  pendingApprovals: number;
+  inProgress: number;
+  completed: number;
+}
