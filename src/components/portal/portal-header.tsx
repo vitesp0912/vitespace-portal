@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, Search } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -20,14 +21,23 @@ import {
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useClientPortal } from "@/lib/portal-store";
+import { useClientAuth } from "@/lib/client-auth";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function PortalHeader() {
-  const { client, notifications, markNotificationRead, markAllNotificationsRead } =
+  const router = useRouter();
+  const { logout } = useClientAuth();
+  const { client, notifications, markNotificationRead, markAllNotificationsRead, setActiveClientId } =
     useClientPortal();
 
   if (!client) return null;
+
+  function handleSignOut() {
+    logout();
+    setActiveClientId("");
+    router.replace("/login");
+  }
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -115,7 +125,7 @@ export function PortalHeader() {
             <DropdownMenuItem disabled>Account settings</DropdownMenuItem>
             <DropdownMenuItem disabled>Team members</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>Sign out</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

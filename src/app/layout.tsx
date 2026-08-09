@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import { PortalProvider } from "@/lib/portal-store";
+import { ClientAuthProvider } from "@/lib/client-auth";
+import { AuthSessionSync } from "@/components/portal/portal-auth-guard";
 import { portalFont } from "@/lib/fonts";
 import "./globals.css";
 
@@ -22,7 +24,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${portalFont.variable} ${geistMono.variable} h-full`}
     >
       <body className="min-h-full">
-        <PortalProvider>{children}</PortalProvider>
+        <PortalProvider>
+          <ClientAuthProvider>
+            <AuthSessionSync />
+            {children}
+          </ClientAuthProvider>
+        </PortalProvider>
       </body>
     </html>
   );

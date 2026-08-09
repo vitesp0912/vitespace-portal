@@ -19,6 +19,7 @@ import { AdminPage } from "@/components/admin/admin-page";
 import { AdminSectionHeader } from "@/components/admin/admin-section-header";
 import { formatCurrency } from "@/lib/constants";
 import { useAdminClient } from "@/lib/portal-store";
+import { useClientAuth } from "@/lib/client-auth";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +40,8 @@ const SECTION_LINKS = (clientId: string) => [
 ];
 
 export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
-  const { client, stats, changeRequests, setActiveClientId } = useAdminClient(clientId);
+  const { client, stats, changeRequests } = useAdminClient(clientId);
+  const { signInAsClient } = useClientAuth();
 
   if (!client) {
     return (
@@ -71,7 +73,7 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
               <button
                 type="button"
                 onClick={() => {
-                  setActiveClientId(clientId);
+                  signInAsClient(clientId, client.email);
                   window.open("/", "_blank");
                 }}
                 className="rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground"

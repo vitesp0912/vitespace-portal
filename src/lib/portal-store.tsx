@@ -42,7 +42,6 @@ import {
 } from "@/lib/seed-data";
 
 const STORAGE_KEY = "vitespace-portal-state";
-const DEFAULT_CLIENT_ID = "celeste-abode";
 
 export interface PortalState {
   clients: Client[];
@@ -71,7 +70,7 @@ const DEFAULT_STATE: PortalState = {
   messages: INITIAL_MESSAGES,
   roadmapItems: INITIAL_ROADMAP,
   notifications: INITIAL_NOTIFICATIONS,
-  activeClientId: DEFAULT_CLIENT_ID,
+  activeClientId: "",
 };
 
 function uid(prefix: string) {
@@ -84,7 +83,10 @@ function loadState(): PortalState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as PortalState;
-      if (parsed.clients?.length) return { ...DEFAULT_STATE, ...parsed };
+      if (parsed.clients?.length) {
+        // activeClientId is owned by auth session, not portal storage
+        return { ...DEFAULT_STATE, ...parsed, activeClientId: "" };
+      }
     }
   } catch { /* seed */ }
   return DEFAULT_STATE;
@@ -382,8 +384,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         messages: s.messages.filter((i) => i.clientId !== id),
         roadmapItems: s.roadmapItems.filter((i) => i.clientId !== id),
         notifications: s.notifications.filter((i) => i.clientId !== id),
-        activeClientId:
-          s.activeClientId === id ? DEFAULT_CLIENT_ID : s.activeClientId,
+        activeClientId: s.activeClientId === id ? "" : s.activeClientId,
       }));
     },
     [patch]

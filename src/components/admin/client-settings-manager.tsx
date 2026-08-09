@@ -21,6 +21,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useAdminClient, usePortal } from "@/lib/portal-store";
+import { useClientAuth } from "@/lib/client-auth";
 import {
   CLIENT_STATUS_LABELS,
   PROJECT_STATUS_LABELS,
@@ -34,8 +35,8 @@ interface ClientSettingsManagerProps {
 }
 
 export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) {
-  const { client, updateClient, setActiveClientId, deleteClient } =
-    useAdminClient(clientId);
+  const { client, updateClient, deleteClient } = useAdminClient(clientId);
+  const { signInAsClient } = useClientAuth();
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -88,7 +89,7 @@ export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) 
   }
 
   function previewAsClient() {
-    setActiveClientId(clientId);
+    signInAsClient(clientId, client!.email);
     window.open("/", "_blank");
   }
 
