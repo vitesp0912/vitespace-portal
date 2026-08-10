@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Search, FileText, Upload, Loader2, Eye, X, Pencil, Check } from "lucide-react";
+import { Search, FileText, Upload, Loader2, Eye, X, Pencil, Check, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,14 +33,13 @@ export function DocumentsPage() {
   const [uploadPercent, setUploadPercent] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [viewer, setViewer] = useState<Document | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [savingTitle, setSavingTitle] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNote, setEditNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = documents.filter((doc) => {
@@ -59,28 +58,27 @@ export function DocumentsPage() {
       setError("Not signed in to a client account yet. Refresh and try again.");
       return;
     }
-    setTitle("");
     setDescription("");
     setFile(null);
     setUploadPercent(0);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setUploadOpen(true);
   }
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const next = e.target.files?.[0] ?? null;
-    e.target.value = "";
     if (!next) return;
 
     if (next.size > MAX_BYTES) {
       setError("File must be 15 MB or smaller.");
+      e.target.value = "";
       return;
     }
 
     setError(null);
     setFile(next);
-    if (!title.trim()) setTitle(next.name.replace(/\.[^.]+$/, "") || next.name);
 
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     const kind = getDocumentMediaKind(next.type, next.name);
@@ -93,10 +91,6 @@ export function DocumentsPage() {
 
   async function handleUpload() {
     if (!clientId || !file || uploading) return;
-    if (!title.trim()) {
-      setError("Please add a title.");
-      return;
-    }
     if (file.size > MAX_BYTES) {
       setError("File must be 15 MB or smaller.");
       return;
@@ -109,7 +103,8 @@ export function DocumentsPage() {
     const body = new FormData();
     body.set("kind", "documents");
     body.set("file", file);
-    body.set("name", title.trim());
+    // Asset title stays the original filename — not editable
+    body.set("name", file.name);
     body.set("description", description.trim());
     body.set("uploadedBy", "client");
     body.set("category", "project_documents");
@@ -149,7 +144,7 @@ export function DocumentsPage() {
 
     addDocument(clientId, {
       id: local.id,
-      name: local.name,
+      name: local.name || file.name,
       description: local.description || description.trim() || undefined,
       category: (local.category as DocumentCategory) || "project_documents",
       size: local.size,
@@ -160,7 +155,6 @@ export function DocumentsPage() {
 
     setUploadOpen(false);
     setFile(null);
-    setTitle("");
     setDescription("");
     setUploadPercent(0);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -168,23 +162,25 @@ export function DocumentsPage() {
     setUploading(false);
   }
 
-  function startEditTitle(doc: Document) {
-    setEditingId(doc.id);
-    setEditTitle(doc.name);
+  function startEditNote(doc: Document) {
+    setEditingNoteId(doc.id);
+    setEditNote(doc.description ?? "");
     setError(null);
   }
 
-  async function saveTitle() {
-    if (!editingId || !editTitle.trim() || savingTitle) return;
-    setSavingTitle(true);
-    const result = await updateDocument(editingId, { name: editTitle.trim() });
-    setSavingTitle(false);
+  async function saveNote() {
+    if (!editingNoteId || savingNote) return;
+    setSavingNote(true);
+    const result = await updateDocument(editingNoteId, {
+      description: editNote.trim(),
+    });
+    setSavingNote(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
-    setEditingId(null);
-    setEditTitle("");
+    setEditingNoteId(null);
+    setEditNote("");
   }
 
   const pickKind = file ? getDocumentMediaKind(file.type, file.name) : "other";
@@ -193,7 +189,7 @@ export function DocumentsPage() {
     <PortalPage className="space-y-8">
       <PortalSectionHeader
         title="Documents"
-        description="Upload files with a title and note. Photos and videos preview instantly."
+        description="Upload files with an optional note. The file name stays as the title."
         action={
           <Button type="button" className="rounded-full" onClick={openUploadDialog}>
             <Upload className="mr-1.5 h-4 w-4" />
@@ -248,7 +244,7 @@ export function DocumentsPage() {
           filtered.map((doc) => {
             const kind = getDocumentMediaKind(doc.mimeType, doc.name);
             const showView = Boolean(doc.fileUrl) && (kind === "image" || kind === "video");
-            const isEditing = editingId === doc.id;
+            const isEditingNote = editingNoteId === doc.id;
 
             return (
               <li key={doc.id} className="group/doc px-5 py-4">
@@ -259,63 +255,58 @@ export function DocumentsPage() {
                         <FileText className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        {isEditing ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={editTitle}
-                              onChange={(e) => setEditTitle(e.target.value)}
-                              className="h-8"
+                        <p className="truncate text-[14px] font-medium">{doc.name}</p>
+
+                        {isEditingNote ? (
+                          <div className="mt-2 space-y-2">
+                            <Textarea
+                              value={editNote}
+                              onChange={(e) => setEditNote(e.target.value)}
+                              rows={3}
+                              className="min-h-0 resize-none text-[13px]"
+                              placeholder="Add a note about this file…"
                               autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  void saveTitle();
-                                }
-                                if (e.key === "Escape") {
-                                  setEditingId(null);
-                                }
-                              }}
                             />
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              variant="ghost"
-                              className="rounded-full"
-                              onClick={() => setEditingId(null)}
-                              disabled={savingTitle}
-                              aria-label="Cancel"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              className="rounded-full"
-                              onClick={() => void saveTitle()}
-                              disabled={!editTitle.trim() || savingTitle}
-                              aria-label="Save title"
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </Button>
+                            <div className="flex gap-1.5">
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                className="rounded-full"
+                                onClick={() => setEditingNoteId(null)}
+                                disabled={savingNote}
+                                aria-label="Cancel"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                className="rounded-full"
+                                onClick={() => void saveNote()}
+                                disabled={savingNote}
+                                aria-label="Save note"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <p className="truncate text-[14px] font-medium">{doc.name}</p>
+                        ) : doc.description ? (
+                          <div className="mt-1 flex items-start gap-2">
+                            <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted-foreground">
+                              {doc.description}
+                            </p>
                             <button
                               type="button"
-                              className="rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/doc:opacity-100"
-                              onClick={() => startEditTitle(doc)}
-                              aria-label="Edit title"
+                              className="shrink-0 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/doc:opacity-100"
+                              onClick={() => startEditNote(doc)}
+                              aria-label="Edit note"
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                           </div>
-                        )}
-                        {doc.description && (
-                          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-                            {doc.description}
-                          </p>
-                        )}
+                        ) : null}
+
                         <p className="mt-1 text-[12px] text-muted-foreground">
                           {doc.size}
                           {" · "}
@@ -350,18 +341,34 @@ export function DocumentsPage() {
                     )}
                   </div>
 
-                  {showView && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0 rounded-full"
-                      onClick={() => setViewer(doc)}
-                    >
-                      <Eye className="mr-1.5 h-3.5 w-3.5" />
-                      View
-                    </Button>
-                  )}
+                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                    {doc.fileUrl && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() =>
+                          window.open(doc.fileUrl, "_blank", "noopener,noreferrer")
+                        }
+                      >
+                        <Download className="mr-1.5 h-3.5 w-3.5" />
+                        Download
+                      </Button>
+                    )}
+                    {showView && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => setViewer(doc)}
+                      >
+                        <Eye className="mr-1.5 h-3.5 w-3.5" />
+                        View
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </li>
             );
@@ -376,20 +383,35 @@ export function DocumentsPage() {
           setUploadOpen(open);
         }}
       >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-full max-w-[calc(100%-2rem)] overflow-x-hidden sm:max-w-md">
+          <DialogHeader className="min-w-0">
             <DialogTitle>Upload file</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-1">
-            <div className="space-y-1.5">
+          <div className="grid min-w-0 max-w-full gap-4 overflow-x-hidden py-1">
+            <div className="min-w-0 max-w-full space-y-1.5 overflow-hidden">
               <Label>File</Label>
               <input
                 ref={fileInputRef}
                 type="file"
                 disabled={uploading}
-                className="block w-full text-[13px] file:mr-3 file:rounded-full file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-[12px] file:font-medium"
+                className="sr-only"
                 onChange={onPickFile}
               />
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Choose file
+              </Button>
+              <p
+                className="max-w-full overflow-hidden break-all text-[13px] text-muted-foreground"
+                title={file?.name}
+              >
+                {file ? file.name : "No file chosen"}
+              </p>
               <p className="text-[11px] text-muted-foreground">Any file type · max 15 MB</p>
             </div>
 
@@ -398,29 +420,19 @@ export function DocumentsPage() {
               <img
                 src={previewUrl}
                 alt="Preview"
-                className="max-h-48 w-full rounded-xl object-cover ring-1 ring-border/60"
+                className="max-h-48 w-full max-w-full rounded-xl object-cover ring-1 ring-border/60"
               />
             )}
             {previewUrl && pickKind === "video" && (
               <video
                 src={previewUrl}
                 controls
-                className="max-h-48 w-full rounded-xl ring-1 ring-border/60"
+                className="max-h-48 w-full max-w-full rounded-xl ring-1 ring-border/60"
               />
             )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="doc-title">Title</Label>
-              <Input
-                id="doc-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Document title"
-                disabled={uploading}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="doc-text">Text / note</Label>
+            <div className="min-w-0 max-w-full space-y-1.5 overflow-hidden">
+              <Label htmlFor="doc-text">Note (optional)</Label>
               <Textarea
                 id="doc-text"
                 value={description}
@@ -466,7 +478,7 @@ export function DocumentsPage() {
               type="button"
               className="rounded-full"
               onClick={() => void handleUpload()}
-              disabled={uploading || !file || !title.trim()}
+              disabled={uploading || !file}
             >
               {uploading && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               {uploading ? `${uploadPercent}%` : "Upload"}

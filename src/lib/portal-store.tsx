@@ -773,13 +773,15 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       input: Partial<DocumentInput>
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       const editedAt =
-        input.name !== undefined ? new Date().toISOString() : undefined;
+        input.description !== undefined ? new Date().toISOString() : undefined;
       const row: Record<string, unknown> = {};
       if (input.name !== undefined) {
         row.name = input.name.trim();
+      }
+      if (input.description !== undefined) {
+        row.description = input.description;
         row.edited_at = editedAt;
       }
-      if (input.description !== undefined) row.description = input.description;
       if (input.category !== undefined) row.category = input.category;
       if (input.size !== undefined) row.file_size = input.size;
       if (input.fileUrl !== undefined) row.file_url = input.fileUrl;
@@ -800,6 +802,10 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
                 ...d,
                 ...input,
                 name: input.name !== undefined ? input.name.trim() : d.name,
+                description:
+                  input.description !== undefined
+                    ? input.description
+                    : d.description,
                 editedAt: editedAt ?? d.editedAt,
               }
             : d
