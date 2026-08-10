@@ -36,9 +36,9 @@ export function MessagesManager({ clientId }: { clientId: string }) {
     sender: "vitespace" as "client" | "vitespace",
   });
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!form.content.trim()) return;
-    addMessage(
+    await addMessage(
       clientId,
       {
         content: form.content,
@@ -63,7 +63,11 @@ export function MessagesManager({ clientId }: { clientId: string }) {
           <li key={msg.id} className="group flex items-start justify-between gap-4 px-5 py-4">
             <div>
               <p className="text-[12px] text-muted-foreground">
-                {msg.senderName} · {MESSAGE_CONTEXT_LABELS[msg.context]} · {msg.contextLabel} · {formatDateTime(msg.timestamp)}
+                {msg.senderName}
+                {msg.contextLabel ? ` · ${msg.contextLabel}` : ""}
+                {" · "}
+                {formatDateTime(msg.timestamp)}
+                {msg.editedAt ? " · Edited" : ""}
               </p>
               <p className="mt-1 text-[14px]">{msg.content}</p>
             </div>

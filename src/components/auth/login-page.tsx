@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,33 +12,42 @@ import { usePortal } from "@/lib/portal-store";
 export function LoginPage() {
   const router = useRouter();
   const { login, session, hydrated } = useClientAuth();
-  const { setActiveClientId } = usePortal();
+  const { setActiveClientId, refreshFromSupabase } = usePortal();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (hydrated && session) router.replace("/");
+    if (!hydrated || !session?.clientId) return;
+    router.replace("/");
   }, [hydrated, session, router]);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    const result = login(email, password);
+    const result = await login(email, password);
     if (!result.ok) {
       setError(result.error);
       setLoading(false);
       return;
     }
 
+    if (!result.clientId) {
+      setError("This account is not linked to a client portal.");
+      setLoading(false);
+      return;
+    }
+
+    await refreshFromSupabase({ isAdmin: false });
     setActiveClientId(result.clientId);
     router.replace("/");
   }
 
-  if (!hydrated || session) {
+  if (!hydrated || (session && session.clientId)) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
@@ -56,11 +65,14 @@ export function LoginPage() {
             </div>
             <h1 className="text-[24px] font-semibold tracking-tight">Sign in to your portal</h1>
             <p className="mt-2 text-[14px] text-muted-foreground">
-              Access your project progress, approvals, and billing.
+              Access your project progress, documents, invoices, and messages.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl bg-surface p-6 portal-shadow ring-1 ring-border/50">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-4 rounded-2xl bg-surface p-6 portal-shadow ring-1 ring-border/50"
+          >
             {error && (
               <div className="rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-700 ring-1 ring-red-500/20">
                 {error}
@@ -82,30 +94,38 @@ export function LoginPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="relative h-8">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-8 pr-10 leading-normal"
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <Eye className="h-4 w-4 shrink-0" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <Button type="submit" className="w-full rounded-full" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-
-          <p className="mt-6 text-center text-[12px] text-muted-foreground">
-            Demo: admin@celesteabode.com / Test@123
-          </p>
         </div>
       </div>
-
-      <footer className="border-t border-border/60 py-4 text-center text-[12px] text-muted-foreground">
-        <Link href="/admin" className="hover:text-foreground">Vitespace internal admin</Link>
-      </footer>
     </div>
   );
 }

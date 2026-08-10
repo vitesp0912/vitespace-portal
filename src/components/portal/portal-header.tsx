@@ -33,8 +33,8 @@ export function PortalHeader() {
 
   if (!client) return null;
 
-  function handleSignOut() {
-    logout();
+  async function handleSignOut() {
+    await logout();
     setActiveClientId("");
     router.replace("/login");
   }

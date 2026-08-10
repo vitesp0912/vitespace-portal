@@ -27,21 +27,8 @@ import type {
   WorkItem,
   WorkItemStatus,
 } from "@/types";
-import {
-  INITIAL_ACTION_ITEMS,
-  INITIAL_APPROVALS,
-  INITIAL_CHANGE_REQUESTS,
-  INITIAL_CLIENTS,
-  INITIAL_DOCUMENTS,
-  INITIAL_INVOICES,
-  INITIAL_MESSAGES,
-  INITIAL_NOTIFICATIONS,
-  INITIAL_PROGRESS_AREAS,
-  INITIAL_ROADMAP,
-  INITIAL_WORK_ITEMS,
-} from "@/lib/seed-data";
-
-const STORAGE_KEY = "vitespace-portal-state";
+import { createClient } from "@/lib/supabase/client";
+import { fetchPortalSnapshot } from "@/lib/supabase/data";
 
 export interface PortalState {
   clients: Client[];
@@ -58,38 +45,23 @@ export interface PortalState {
   activeClientId: string;
 }
 
-const DEFAULT_STATE: PortalState = {
-  clients: INITIAL_CLIENTS,
-  workItems: INITIAL_WORK_ITEMS,
-  actionItems: INITIAL_ACTION_ITEMS,
-  progressAreas: INITIAL_PROGRESS_AREAS,
-  changeRequests: INITIAL_CHANGE_REQUESTS,
-  approvals: INITIAL_APPROVALS,
-  invoices: INITIAL_INVOICES,
-  documents: INITIAL_DOCUMENTS,
-  messages: INITIAL_MESSAGES,
-  roadmapItems: INITIAL_ROADMAP,
-  notifications: INITIAL_NOTIFICATIONS,
+const EMPTY_STATE: PortalState = {
+  clients: [],
+  workItems: [],
+  actionItems: [],
+  progressAreas: [],
+  changeRequests: [],
+  approvals: [],
+  invoices: [],
+  documents: [],
+  messages: [],
+  roadmapItems: [],
+  notifications: [],
   activeClientId: "",
 };
 
 function uid(prefix: string) {
   return `${prefix}${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-}
-
-function loadState(): PortalState {
-  if (typeof window === "undefined") return DEFAULT_STATE;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as PortalState;
-      if (parsed.clients?.length) {
-        // activeClientId is owned by auth session, not portal storage
-        return { ...DEFAULT_STATE, ...parsed, activeClientId: "" };
-      }
-    }
-  } catch { /* seed */ }
-  return DEFAULT_STATE;
 }
 
 function isThisMonth(dateString?: string) {
@@ -162,20 +134,28 @@ export interface InvoiceInput {
   dueAt: string;
   status: InvoiceStatus;
   paidAt?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: string;
 }
 
 export interface DocumentInput {
+  id?: string;
   name: string;
   category: Document["category"];
   size: string;
   project?: string;
   fileUrl?: string;
+  description?: string;
+  mimeType?: string;
+  uploadedByUserId?: string;
+  editedAt?: string;
 }
 
 export interface MessageInput {
   content: string;
-  context: Message["context"];
-  contextLabel: string;
+  context?: Message["context"];
+  contextLabel?: string;
   contextHref?: string;
 }
 
@@ -239,9 +219,20 @@ type PortalContextValue = PortalState & {
   deleteInvoice: (id: string) => void;
   markInvoicePaid: (id: string, paidAt?: string) => void;
   addDocument: (clientId: string, input: DocumentInput) => Document;
-  updateDocument: (id: string, input: Partial<DocumentInput>) => void;
+  updateDocument: (
+    id: string,
+    input: Partial<DocumentInput>
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   deleteDocument: (id: string) => void;
-  addMessage: (clientId: string, input: MessageInput, sender?: "client" | "vitespace") => Message;
+  addMessage: (
+    clientId: string,
+    input: MessageInput,
+    sender?: "client" | "vitespace"
+  ) => Promise<{ ok: true; message: Message } | { ok: false; error: string }>;
+  updateMessage: (
+    id: string,
+    content: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   deleteMessage: (id: string) => void;
   addRoadmapItem: (clientId: string, input: RoadmapInput) => RoadmapItem;
   updateRoadmapItem: (id: string, input: Partial<RoadmapInput>) => void;
@@ -251,27 +242,71 @@ type PortalContextValue = PortalState & {
   deleteNotification: (id: string) => void;
   markNotificationRead: (id: string, read?: boolean) => void;
   markAllNotificationsRead: (clientId: string) => void;
+  refreshFromSupabase: (options?: {
+    isAdmin?: boolean;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  dataError: string | null;
+  loadingData: boolean;
   resetToSeed: () => void;
 };
 
 const PortalContext = createContext<PortalContextValue | null>(null);
 
 export function PortalProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<PortalState>(DEFAULT_STATE);
+  const [state, setState] = useState<PortalState>(EMPTY_STATE);
   const [hydrated, setHydrated] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   useEffect(() => {
-    setState(loadState());
+    try {
+      localStorage.removeItem("vitespace-portal-state");
+      localStorage.removeItem("vitespace-client-session");
+    } catch {
+      /* ignore */
+    }
     setHydrated(true);
   }, []);
-
-  useEffect(() => {
-    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state, hydrated]);
 
   const patch = useCallback((fn: (s: PortalState) => PortalState) => {
     setState(fn);
   }, []);
+
+  const refreshFromSupabase = useCallback(
+    async (options?: { isAdmin?: boolean }) => {
+      setLoadingData(true);
+      setDataError(null);
+      try {
+        const supabase = createClient();
+        const snapshot = await fetchPortalSnapshot(supabase, {
+          notificationRecipient: options?.isAdmin ? "vitespace" : "client",
+        });
+        setState((s) => ({
+          ...s,
+          clients: snapshot.clients,
+          invoices: snapshot.invoices,
+          documents: snapshot.documents,
+          messages: snapshot.messages,
+          notifications: snapshot.notifications,
+          // Legacy entities not in Supabase yet — keep empty (no hardcoded seed)
+          workItems: [],
+          actionItems: [],
+          progressAreas: [],
+          changeRequests: [],
+          approvals: [],
+          roadmapItems: [],
+        }));
+        return { ok: true as const };
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Failed to load data";
+        setDataError(message);
+        return { ok: false as const, error: message };
+      } finally {
+        setLoadingData(false);
+      }
+    },
+    []
+  );
 
   const activeClient = useMemo(
     () => state.clients.find((c) => c.id === state.activeClientId),
@@ -350,6 +385,19 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         lastUpdatedAt: new Date().toISOString(),
       };
       patch((s) => ({ ...s, clients: [...s.clients, client] }));
+      void createClient()
+        .from("clients")
+        .upsert({
+          id: client.id,
+          name: client.name,
+          company: client.company,
+          email: client.email,
+          monthly_retainer: client.monthlyRetainer,
+          status: client.status,
+          project_status: client.projectStatus,
+          project_name: client.projectName,
+          last_updated_at: client.lastUpdatedAt,
+        });
       return client;
     },
     [patch]
@@ -357,14 +405,24 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
 
   const updateClient = useCallback(
     (id: string, input: Partial<ClientInput>) => {
+      const lastUpdatedAt = new Date().toISOString();
       patch((s) => ({
         ...s,
         clients: s.clients.map((c) =>
-          c.id === id
-            ? { ...c, ...input, lastUpdatedAt: new Date().toISOString() }
-            : c
+          c.id === id ? { ...c, ...input, lastUpdatedAt } : c
         ),
       }));
+      const row: Record<string, unknown> = { last_updated_at: lastUpdatedAt };
+      if (input.name !== undefined) row.name = input.name;
+      if (input.company !== undefined) row.company = input.company;
+      if (input.email !== undefined) row.email = input.email;
+      if (input.monthlyRetainer !== undefined)
+        row.monthly_retainer = input.monthlyRetainer;
+      if (input.status !== undefined) row.status = input.status;
+      if (input.projectStatus !== undefined)
+        row.project_status = input.projectStatus;
+      if (input.projectName !== undefined) row.project_name = input.projectName;
+      void createClient().from("clients").update(row).eq("id", id);
     },
     [patch]
   );
@@ -386,6 +444,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         notifications: s.notifications.filter((i) => i.clientId !== id),
         activeClientId: s.activeClientId === id ? "" : s.activeClientId,
       }));
+      void createClient().from("clients").delete().eq("id", id);
     },
     [patch]
   );
@@ -654,12 +713,26 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         ...s,
         invoices: s.invoices.map((i) => (i.id === id ? { ...i, ...input } : i)),
       }));
+      const row: Record<string, unknown> = {};
+      if (input.number !== undefined) row.number = input.number;
+      if (input.title !== undefined) row.title = input.title;
+      if (input.amount !== undefined) row.amount = input.amount;
+      if (input.issuedAt !== undefined) row.issued_at = input.issuedAt;
+      if (input.dueAt !== undefined) row.due_at = input.dueAt;
+      if (input.status !== undefined) row.status = input.status;
+      if (input.fileUrl !== undefined) row.file_url = input.fileUrl;
+      if (input.fileName !== undefined) row.file_name = input.fileName;
+      if (input.fileSize !== undefined) row.file_size = input.fileSize;
+      if (Object.keys(row).length) {
+        void createClient().from("invoices").update(row).eq("id", id);
+      }
     },
     [patch]
   );
   const deleteInvoice = useCallback(
     (id: string) => {
       patch((s) => ({ ...s, invoices: s.invoices.filter((i) => i.id !== id) }));
+      void createClient().from("invoices").delete().eq("id", id);
     },
     [patch]
   );
@@ -676,10 +749,18 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
   const addDocument = useCallback(
     (clientId: string, input: DocumentInput): Document => {
       const doc: Document = {
-        id: uid("d"),
+        id: input.id ?? uid("d"),
         clientId,
         uploadedAt: new Date().toISOString().split("T")[0],
-        ...input,
+        name: input.name,
+        category: input.category,
+        size: input.size,
+        project: input.project,
+        fileUrl: input.fileUrl,
+        description: input.description,
+        mimeType: input.mimeType,
+        uploadedByUserId: input.uploadedByUserId,
+        editedAt: input.editedAt,
       };
       patch((s) => ({ ...s, documents: [doc, ...s.documents] }));
       return doc;
@@ -687,41 +768,140 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     [patch]
   );
   const updateDocument = useCallback(
-    (id: string, input: Partial<DocumentInput>) => {
+    async (
+      id: string,
+      input: Partial<DocumentInput>
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const editedAt =
+        input.name !== undefined ? new Date().toISOString() : undefined;
+      const row: Record<string, unknown> = {};
+      if (input.name !== undefined) {
+        row.name = input.name.trim();
+        row.edited_at = editedAt;
+      }
+      if (input.description !== undefined) row.description = input.description;
+      if (input.category !== undefined) row.category = input.category;
+      if (input.size !== undefined) row.file_size = input.size;
+      if (input.fileUrl !== undefined) row.file_url = input.fileUrl;
+
+      if (Object.keys(row).length) {
+        const { error } = await createClient()
+          .from("documents")
+          .update(row)
+          .eq("id", id);
+        if (error) return { ok: false, error: error.message };
+      }
+
       patch((s) => ({
         ...s,
-        documents: s.documents.map((d) => (d.id === id ? { ...d, ...input } : d)),
+        documents: s.documents.map((d) =>
+          d.id === id
+            ? {
+                ...d,
+                ...input,
+                name: input.name !== undefined ? input.name.trim() : d.name,
+                editedAt: editedAt ?? d.editedAt,
+              }
+            : d
+        ),
       }));
+      return { ok: true };
     },
     [patch]
   );
   const deleteDocument = useCallback(
     (id: string) => {
       patch((s) => ({ ...s, documents: s.documents.filter((d) => d.id !== id) }));
+      void createClient().from("documents").delete().eq("id", id);
     },
     [patch]
   );
 
   const addMessage = useCallback(
-    (clientId: string, input: MessageInput, sender: "client" | "vitespace" = "vitespace"): Message => {
+    async (
+      clientId: string,
+      input: MessageInput,
+      sender: "client" | "vitespace" = "vitespace"
+    ): Promise<{ ok: true; message: Message } | { ok: false; error: string }> => {
       const client = state.clients.find((c) => c.id === clientId);
       const msg: Message = {
         id: uid("m"),
         clientId,
         sender,
         senderName: sender === "client" ? (client?.name ?? "Client") : "Vitespace",
+        content: input.content.trim(),
         timestamp: new Date().toISOString(),
-        ...input,
+        context: input.context,
+        contextLabel: input.contextLabel,
+        contextHref: input.contextHref,
       };
+
+      const supabase = createClient();
+      const { error } = await supabase.from("messages").insert({
+        id: msg.id,
+        client_id: clientId,
+        sender: msg.sender,
+        sender_name: msg.senderName,
+        content: msg.content,
+        created_at: msg.timestamp,
+      });
+
+      if (error) {
+        return { ok: false, error: error.message };
+      }
+
       patch((s) => ({ ...s, messages: [...s.messages, msg] }));
       touchClientUpdated(clientId);
-      return msg;
+
+      void supabase.from("notifications").insert({
+        id: uid("n"),
+        client_id: clientId,
+        recipient: sender === "client" ? "vitespace" : "client",
+        title: "New message",
+        message: msg.content.slice(0, 120),
+        href: "/messages",
+        read: false,
+      });
+
+      return { ok: true, message: msg };
     },
     [patch, state.clients, touchClientUpdated]
   );
+
+  const updateMessage = useCallback(
+    async (
+      id: string,
+      content: string
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const trimmed = content.trim();
+      if (!trimmed) return { ok: false, error: "Message cannot be empty." };
+
+      const editedAt = new Date().toISOString();
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("messages")
+        .update({ content: trimmed, edited_at: editedAt })
+        .eq("id", id);
+
+      if (error) {
+        return { ok: false, error: error.message };
+      }
+
+      patch((s) => ({
+        ...s,
+        messages: s.messages.map((m) =>
+          m.id === id ? { ...m, content: trimmed, editedAt } : m
+        ),
+      }));
+      return { ok: true };
+    },
+    [patch]
+  );
+
   const deleteMessage = useCallback(
     (id: string) => {
       patch((s) => ({ ...s, messages: s.messages.filter((m) => m.id !== id) }));
+      void createClient().from("messages").delete().eq("id", id);
     },
     [patch]
   );
@@ -789,6 +969,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
           n.id === id ? { ...n, read } : n
         ),
       }));
+      void createClient().from("notifications").update({ read }).eq("id", id);
     },
     [patch]
   );
@@ -800,19 +981,24 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
           n.clientId === clientId ? { ...n, read: true } : n
         ),
       }));
+      void createClient()
+        .from("notifications")
+        .update({ read: true })
+        .eq("client_id", clientId);
     },
     [patch]
   );
 
   const resetToSeed = useCallback(() => {
-    setState(DEFAULT_STATE);
-    localStorage.removeItem(STORAGE_KEY);
-  }, []);
+    void refreshFromSupabase();
+  }, [refreshFromSupabase]);
 
   const value = useMemo<PortalContextValue>(
     () => ({
       ...state,
       hydrated,
+      loadingData,
+      dataError,
       activeClient,
       setActiveClientId,
       getClient,
@@ -857,6 +1043,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       updateDocument,
       deleteDocument,
       addMessage,
+      updateMessage,
       deleteMessage,
       addRoadmapItem,
       updateRoadmapItem,
@@ -866,11 +1053,14 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       deleteNotification,
       markNotificationRead,
       markAllNotificationsRead,
+      refreshFromSupabase,
       resetToSeed,
     }),
     [
       state,
       hydrated,
+      loadingData,
+      dataError,
       activeClient,
       setActiveClientId,
       getClient,
@@ -915,6 +1105,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       updateDocument,
       deleteDocument,
       addMessage,
+      updateMessage,
       deleteMessage,
       addRoadmapItem,
       updateRoadmapItem,
@@ -924,6 +1115,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       deleteNotification,
       markNotificationRead,
       markAllNotificationsRead,
+      refreshFromSupabase,
       resetToSeed,
     ]
   );

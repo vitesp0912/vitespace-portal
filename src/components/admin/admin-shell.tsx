@@ -107,7 +107,7 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
 
         <div className="space-y-1 border-t border-sidebar-border p-3">
           <Link
-            href="/login"
+            href="/"
             className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-sidebar-foreground transition-colors hover:bg-white/[0.06] hover:text-white"
           >
             <ExternalLink className="h-4 w-4 shrink-0 opacity-70" />

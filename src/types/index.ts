@@ -16,7 +16,7 @@ export type RequestStatus =
 
 export type ApprovalStatus = "pending" | "approved" | "changes_requested";
 
-export type InvoiceStatus = "pending" | "paid" | "overdue";
+export type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
 
 export type RoadmapStatus = "committed" | "in_progress" | "planned" | "proposed";
 
@@ -124,17 +124,24 @@ export interface Invoice {
   dueAt: string;
   paidAt?: string;
   status: InvoiceStatus;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: string;
 }
 
 export interface Document {
   id: string;
   clientId: string;
   name: string;
+  description?: string;
   category: DocumentCategory;
   uploadedAt: string;
   size: string;
   project?: string;
   fileUrl?: string;
+  mimeType?: string;
+  uploadedByUserId?: string;
+  editedAt?: string;
 }
 
 export interface Message {
@@ -144,8 +151,10 @@ export interface Message {
   senderName: string;
   content: string;
   timestamp: string;
-  context: ConversationContext;
-  contextLabel: string;
+  editedAt?: string;
+  /** Optional legacy UI fields — not stored in Supabase messages table */
+  context?: ConversationContext;
+  contextLabel?: string;
   contextHref?: string;
 }
 
