@@ -42,6 +42,7 @@ export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   pending: "Pending",
   paid: "Paid",
   overdue: "Overdue",
+  cancelled: "Cancelled",
 };
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
