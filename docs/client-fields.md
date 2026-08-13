@@ -127,7 +127,7 @@ When adding a new client in admin, you need at least:
 
 Optional: `avatar`.
 
-Portal login for that client is a separate step: create a Supabase Auth user, then insert a `client_users` row linking `user_id` → `client_id`.
+Portal login for that client: use **Client Settings → Portal users** (creates/links Auth + `client_users`), or do it manually in Supabase as below.
 
 ---
 

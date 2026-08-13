@@ -28,6 +28,7 @@ import {
 } from "@/lib/constants";
 import { formatRelativeTime } from "@/lib/format";
 import type { Client, ProjectStatus } from "@/types";
+import { ClientUsersManager } from "@/components/admin/client-users-manager";
 
 interface ClientSettingsManagerProps {
   clientId: string;
@@ -164,6 +165,8 @@ export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) 
           />
         </dl>
       </div>
+
+      <ClientUsersManager clientId={clientId} />
 
       <div className="flex justify-end">
         <Button

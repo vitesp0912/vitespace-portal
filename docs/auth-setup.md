@@ -3,8 +3,13 @@
 ## Client portal
 
 1. Run SQL: `001_clients.sql`, `002_seed_client.sql`, `003_core_tables.sql`
-2. **Authentication → Users → Add user** (email + password, Auto Confirm on)
-3. Link them in `client_users`:
+2. Create the client in admin (**Add Client**), or seed one.
+3. On **Client Settings → Portal users**, add a user (email + password). This creates the Auth user (if needed) and links `client_users`.
+
+Manual alternative:
+
+1. **Authentication → Users → Add user** (email + password, Auto Confirm on)
+2. Link them in `client_users`:
 
 ```sql
 insert into client_users (user_id, client_id, role)
@@ -12,7 +17,7 @@ values ('YOUR_AUTH_USER_UUID', 'test-client', 'owner')
 on conflict (user_id, client_id) do nothing;
 ```
 
-4. Sign in at `/login` → client portal at `/`
+3. Sign in at `/login` → client portal at `/`
 
 ## Admin (Vitespace team)
 
