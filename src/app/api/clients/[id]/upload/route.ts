@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAdminEmail } from "@/lib/admin";
 import { createClient as createServerSupabase } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
@@ -55,7 +56,15 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
-    if (!membership) {
+    const { data: adminRow } = await authClient
+      .from("admin_users")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const isAdmin = Boolean(adminRow) || isAdminEmail(user.email);
+
+    if (!membership && !isAdmin) {
       return NextResponse.json(
         { error: "You do not have access to this client." },
         { status: 403 }
@@ -73,23 +82,15 @@ export async function POST(request: Request, context: RouteContext) {
     }
     const kind = kindRaw as R2FolderKind;
 
-    // Invoices are Vitespace-only — clients view/download only
-    if (kind === "invoices") {
-      const { data: adminRow } = await authClient
-        .from("admin_users")
-        .select("user_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (!adminRow) {
-        return NextResponse.json(
-          {
-            error:
-              "Invoice uploads are not available from the client portal. Vitespace will upload invoices for you.",
-          },
-          { status: 403 }
-        );
-      }
+    // Invoices are Vitespace admin only — clients view/download only
+    if (kind === "invoices" && !isAdmin) {
+      return NextResponse.json(
+        {
+          error:
+            "Invoice uploads are not available from the client portal. Vitespace will upload invoices for you.",
+        },
+        { status: 403 }
+      );
     }
 
     const file = form.get("file");
@@ -230,6 +231,8 @@ export async function POST(request: Request, context: RouteContext) {
     const mimeType = file.type || null;
     const id = `doc_${Date.now()}`;
 
+    const uploadedByEmail = user.email?.trim() || null;
+
     const row = {
       id,
       client_id: clientId,
@@ -241,6 +244,7 @@ export async function POST(request: Request, context: RouteContext) {
       mime_type: mimeType,
       uploaded_by: uploadedBy,
       uploaded_by_user_id: user.id,
+      uploaded_by_email: uploadedByEmail,
       uploaded_at: nowIso,
     };
 
@@ -276,7 +280,9 @@ export async function POST(request: Request, context: RouteContext) {
         size: data.file_size || fileSize,
         fileUrl: data.file_url,
         mimeType: data.mime_type ?? undefined,
+        uploadedBy: data.uploaded_by ?? uploadedBy,
         uploadedByUserId: data.uploaded_by_user_id ?? user.id,
+        uploadedByEmail: data.uploaded_by_email ?? uploadedByEmail ?? undefined,
       },
     });
   } catch (err) {

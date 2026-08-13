@@ -14,6 +14,7 @@ create table if not exists tasks (
   description text,
   status text not null check (
     status in (
+      'pending',
       'requested',
       'pending_approval',
       'approved',

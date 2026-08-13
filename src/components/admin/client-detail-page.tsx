@@ -5,12 +5,9 @@ import {
   ArrowRight,
   ListTodo,
   Settings,
-  FileText,
-  CheckCircle2,
   Receipt,
   FolderOpen,
   MessageSquare,
-  Map,
   Bell,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -19,7 +16,6 @@ import { AdminPage } from "@/components/admin/admin-page";
 import { AdminSectionHeader } from "@/components/admin/admin-section-header";
 import { formatCurrency } from "@/lib/constants";
 import { useAdminClient } from "@/lib/portal-store";
-import { useClientAuth } from "@/lib/client-auth";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -28,20 +24,16 @@ interface ClientDetailPageProps {
 }
 
 const SECTION_LINKS = (clientId: string) => [
-  { href: `/admin/clients/${clientId}/settings`, label: "Settings", desc: "Profile, progress areas, actions", icon: Settings },
+  { href: `/admin/clients/${clientId}/settings`, label: "Settings", desc: "Profile and account details", icon: Settings },
   { href: `/admin/clients/${clientId}/work`, label: "Work Items", desc: "Progress page items", icon: ListTodo },
-  { href: `/admin/clients/${clientId}/requests`, label: "Requests", desc: "Change requests", icon: FileText },
-  { href: `/admin/clients/${clientId}/approvals`, label: "Approvals", desc: "Client sign-offs", icon: CheckCircle2 },
   { href: `/admin/clients/${clientId}/invoices`, label: "Invoices", desc: "Billing", icon: Receipt },
   { href: `/admin/clients/${clientId}/documents`, label: "Documents", desc: "File library", icon: FolderOpen },
   { href: `/admin/clients/${clientId}/messages`, label: "Messages", desc: "Conversations", icon: MessageSquare },
-  { href: `/admin/clients/${clientId}/roadmap`, label: "Roadmap", desc: "Planned work", icon: Map },
   { href: `/admin/clients/${clientId}/notifications`, label: "Notifications", desc: "Bell alerts", icon: Bell },
 ];
 
 export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
-  const { client, stats, changeRequests } = useAdminClient(clientId);
-  const { signInAsClient } = useClientAuth();
+  const { client, stats } = useAdminClient(clientId);
 
   if (!client) {
     return (
@@ -67,23 +59,8 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         <AdminSectionHeader
           title={client.company}
           description={`${client.projectName} · ${client.name}`}
-          action={
-            <div className="flex items-center gap-2">
-              <StatusBadge status={client.projectStatus} />
-              <button
-                type="button"
-                onClick={() => {
-                  signInAsClient(clientId, client.email);
-                  window.open("/", "_blank");
-                }}
-                className="rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground"
-              >
-                Preview Portal
-              </button>
-            </div>
-          }
+          action={<StatusBadge status={client.projectStatus} />}
         />
-
         <div className="admin-gradient-accent overflow-hidden rounded-2xl ring-1 ring-brand/20">
           <div className="grid grid-cols-2 divide-x divide-white/[0.06] sm:grid-cols-5">
             {metrics.map((m) => (
@@ -137,25 +114,6 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             Manage Work Items <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
-
-        {changeRequests.length > 0 && (
-          <section>
-            <h2 className="mb-3 text-[13px] font-semibold">Recent Change Requests</h2>
-            <ul className="divide-y divide-border/60 rounded-2xl bg-card ring-1 ring-border/80">
-              {changeRequests.slice(0, 4).map((cr) => (
-                <li key={cr.id} className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <span className="font-mono text-[11px] text-muted-foreground">{cr.number}</span>
-                    <p className="mt-0.5 text-[14px] font-medium">{cr.title}</p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-[11px] capitalize text-muted-foreground">
-                    {cr.status.replace("_", " ")}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
 
         <p className="text-[12px] text-muted-foreground">
           Last updated {formatRelativeTime(client.lastUpdatedAt)}

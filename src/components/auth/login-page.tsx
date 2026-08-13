@@ -20,8 +20,14 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!hydrated || !session?.clientId) return;
-    router.replace("/");
+    if (!hydrated) return;
+    if (session?.isAdmin) {
+      router.replace("/admin");
+      return;
+    }
+    if (session?.clientId) {
+      router.replace("/");
+    }
   }, [hydrated, session, router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -36,6 +42,11 @@ export function LoginPage() {
       return;
     }
 
+    if (result.isAdmin) {
+      router.replace("/admin");
+      return;
+    }
+
     if (!result.clientId) {
       setError("This account is not linked to a client portal.");
       setLoading(false);
@@ -47,7 +58,7 @@ export function LoginPage() {
     router.replace("/");
   }
 
-  if (!hydrated || (session && session.clientId)) {
+  if (!hydrated || session?.clientId || session?.isAdmin) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />

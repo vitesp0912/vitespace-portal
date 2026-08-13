@@ -5,6 +5,13 @@ Tables after the slim redesign. Run in order:
 1. `supabase/migrations/001_clients.sql`
 2. `supabase/migrations/002_seed_client.sql` (optional seed client)
 3. `supabase/migrations/003_core_tables.sql`
+4. `supabase/migrations/004_admin_users.sql` (admin RLS)
+5. `supabase/migrations/009_services.sql` (global services + tasks.service_id)
+6. `supabase/migrations/010_services_global.sql` (only if you already ran an older per-client 009)
+7. `supabase/migrations/011_tasks_timeline_creator.sql` (drop deadline; add created_by_user_id)
+8. `supabase/migrations/012_tasks_days_creator_email.sql` (days + created_by_email)
+9. `supabase/migrations/013_documents_uploader_email.sql` (uploaded_by_email)
+10. `supabase/migrations/014_tasks_pending_status.sql` (pending status)
 
 Auth sessions: use built-in Supabase Auth — no custom sessions table.
 
@@ -16,27 +23,45 @@ Auth sessions: use built-in Supabase Auth — no custom sessions table.
 
 See `docs/client-fields.md`.
 
+### `services`
+
+| Column | Type | Required | Notes |
+|--------|------|----------|-------|
+| `id` | text | Yes | PK |
+| `name` | text | Yes | Global unique free-text label |
+| `created_at` | timestamptz | Yes | |
+
+Global catalog (not per client). Managed on the **admin home** page. Assign any service to tasks for any client.
+
+Run `009_services.sql` (and `010_services_global.sql` if you already had per-client services).
+
 ### `tasks`
 
 | Column | Type | Required | Notes |
 |--------|------|----------|-------|
 | `id` | text | Yes | PK |
 | `client_id` | text | Yes | → `clients.id` |
-| `service` | text | Yes | Free-form string, e.g. `Development`, `SEO` (not an enum) |
+| `service_id` | text | Yes | → `services.id` (global) |
 | `parent_id` | text | No | → `tasks.id` (subtask). Null = top-level |
 | `title` | text | Yes | |
 | `description` | text | No | |
 | `status` | text | Yes | See below |
-| `created_by` | text | Yes | `client` \| `vitespace` |
-| `deadline` | date | No | |
-| `timeline_start` | date | No | |
-| `timeline_end` | date | No | |
+| `created_by` | text | Yes | `client` \| `vitespace` (auto from logged-in role) |
+| `created_by_user_id` | uuid | No | → `auth.users.id` of creator |
+| `created_by_email` | text | No | Creator email (display) |
+| `timeline_start` | date | No | Start date |
+| `timeline_end` | date | No | End date (≥ start) |
+| `days` | integer | No | Generated: inclusive days (same day = 1) |
 | `created_at` | timestamptz | Yes | |
 | `updated_at` | timestamptz | Yes | |
 
-**Status:** `requested` · `pending_approval` · `approved` · `in_progress` · `completed` · `rejected` · `cancelled`
+**Status:** `pending` · `in_progress` · `requested` · `pending_approval` · `approved` · `completed` · `rejected` · `cancelled`
+
+Run `014_tasks_pending_status.sql` to allow `pending`.
 
 Client-created work = `created_by = 'client'` (often `status = 'requested'`).
+
+Run `011_tasks_timeline_creator.sql` to drop `deadline` and add `created_by_user_id`.
 
 ### `invoices`
 
@@ -72,9 +97,12 @@ Admin uploads to R2, then saves `file_url`. Client downloads via that link.
 | `mime_type` | text | No | Used for image/video preview |
 | `uploaded_by` | text | Yes | `client` \| `vitespace` (default vitespace) |
 | `uploaded_by_user_id` | uuid | No | → `auth.users.id` who uploaded |
+| `uploaded_by_email` | text | No | Uploader email (display) |
 | `uploaded_at` | timestamptz | Yes | |
 | `edited_at` | timestamptz | No | Set when title is edited |
 | `created_at` | timestamptz | Yes | |
+
+Run `013_documents_uploader_email.sql` for `uploaded_by_email`.
 
 ### `messages`
 

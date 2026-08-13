@@ -61,23 +61,7 @@ export const INITIAL_CLIENTS: Client[] = [
   },
 ];
 
-export const INITIAL_WORK_ITEMS: WorkItem[] = [
-  { id: "w1", clientId: "celeste-abode", title: "Sobha Rivana property page updated", status: "completed", project: "Website", completedAt: "2026-08-08", createdAt: TS, updatedAt: TS },
-  { id: "w2", clientId: "celeste-abode", title: "Technical SEO fixes completed", status: "completed", project: "SEO", completedAt: "2026-08-07", createdAt: TS, updatedAt: TS },
-  { id: "w3", clientId: "celeste-abode", title: "Google Search Console monitoring", status: "completed", project: "SEO", completedAt: "2026-08-05", createdAt: TS, updatedAt: TS },
-  { id: "w4", clientId: "celeste-abode", title: "Blog #14 published", status: "completed", project: "SEO", completedAt: "2026-08-03", createdAt: TS, updatedAt: TS },
-  { id: "w5", clientId: "celeste-abode", title: "Forest Walk Villa page", status: "in_progress", project: "Website", stages: ["Content", "Design", "Development", "QA"], currentStage: 2, progress: 50, createdAt: TS, updatedAt: TS },
-  { id: "w6", clientId: "celeste-abode", title: "Property database migration", status: "in_progress", project: "Website", progress: 65, createdAt: TS, updatedAt: TS },
-  { id: "w7", clientId: "celeste-abode", title: "August SEO content batch", status: "in_progress", project: "SEO", progress: 40, createdAt: TS, updatedAt: TS },
-  { id: "w8", clientId: "celeste-abode", title: "Performance audit & fixes", status: "in_progress", project: "Website", progress: 40, createdAt: TS, updatedAt: TS },
-  { id: "w9", clientId: "celeste-abode", title: "4 new property pages", status: "upcoming", project: "Website", dueDate: "2026-08-25", createdAt: TS, updatedAt: TS },
-  { id: "w10", clientId: "celeste-abode", title: "August SEO content", status: "upcoming", project: "SEO", dueDate: "2026-08-20", createdAt: TS, updatedAt: TS },
-  { id: "w11", clientId: "celeste-abode", title: "Lead intent module", status: "upcoming", project: "Website", dueDate: "2026-09-05", createdAt: TS, updatedAt: TS },
-  { id: "w12", clientId: "celeste-abode", title: "Property pricing data", status: "awaiting_client", project: "Website", description: "Need updated pricing for all Q3 launches", createdAt: TS, updatedAt: TS },
-  { id: "w13", clientId: "celeste-abode", title: "Updated floor plan for ACE Terra", status: "awaiting_client", project: "Website", description: "Required to proceed with property page design", createdAt: TS, updatedAt: TS },
-  { id: "w14", clientId: "petrofi", title: "Landing page redesign", status: "in_progress", project: "Website", progress: 30, createdAt: TS, updatedAt: TS },
-  { id: "w15", clientId: "aam-altair", title: "Brand guidelines review", status: "awaiting_client", project: "Creative", description: "Awaiting signed-off brand assets", createdAt: TS, updatedAt: TS },
-];
+export const INITIAL_WORK_ITEMS: WorkItem[] = [];
 
 export const INITIAL_ACTION_ITEMS: ActionItem[] = [
   { id: "ai1", clientId: "celeste-abode", title: "Approve August SEO Plan", type: "approval", linkedEntityId: "ap1", priority: "high", requestedAt: "2026-08-09T16:00:00" },
@@ -113,9 +97,9 @@ export const INITIAL_DOCUMENTS: Document[] = [
   { id: "d1", clientId: "celeste-abode", name: "Service Agreement 2026.pdf", category: "contracts", uploadedAt: "2026-01-15", size: "245 KB" },
   { id: "d2", clientId: "celeste-abode", name: "INV-2026-017.pdf", category: "invoices", uploadedAt: "2026-07-05", size: "128 KB" },
   { id: "d3", clientId: "celeste-abode", name: "July SEO Report.pdf", category: "seo_reports", uploadedAt: "2026-08-01", size: "2.4 MB" },
-  { id: "d4", clientId: "celeste-abode", name: "Property Data Q3.xlsx", category: "property_data", uploadedAt: "2026-07-20", size: "890 KB", project: "Website" },
+  { id: "d4", clientId: "celeste-abode", name: "Property Data Q3.xlsx", category: "property_data", uploadedAt: "2026-07-20", size: "890 KB" },
   { id: "d5", clientId: "celeste-abode", name: "Brand Guidelines.pdf", category: "creative_assets", uploadedAt: "2026-03-10", size: "5.1 MB" },
-  { id: "d6", clientId: "celeste-abode", name: "Website Architecture.docx", category: "project_documents", uploadedAt: "2026-02-28", size: "340 KB", project: "Website" },
+  { id: "d6", clientId: "celeste-abode", name: "Website Architecture.docx", category: "project_documents", uploadedAt: "2026-02-28", size: "340 KB" },
 ];
 
 export const INITIAL_MESSAGES: Message[] = [
@@ -137,7 +121,7 @@ export const INITIAL_ROADMAP: RoadmapItem[] = [
 ];
 
 export const INITIAL_NOTIFICATIONS: Notification[] = [
-  { id: "n1", clientId: "celeste-abode", title: "Approval required", message: "August SEO Content Plan needs your review", timestamp: "2026-08-07T09:00:00", read: false, href: "/approvals" },
+  { id: "n1", clientId: "celeste-abode", title: "Approval required", message: "August SEO Content Plan needs your review", timestamp: "2026-08-07T09:00:00", read: false, href: "/progress" },
   { id: "n2", clientId: "celeste-abode", title: "Client action required", message: "ACE Terra pricing data is needed", timestamp: "2026-08-06T14:00:00", read: false, href: "/progress?tab=awaiting" },
   { id: "n3", clientId: "celeste-abode", title: "Change request updated", message: "CR-024 is now under review", timestamp: "2026-08-09T17:20:00", read: true, href: "/requests" },
   { id: "n4", clientId: "celeste-abode", title: "Invoice generated", message: "INV-2026-018 for August 2026 is ready", timestamp: "2026-08-05T11:00:00", read: true, href: "/invoices" },

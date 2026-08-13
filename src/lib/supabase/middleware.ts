@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isAdminEmail } from "@/lib/admin";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -7,13 +8,23 @@ export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  const path = request.nextUrl.pathname;
+  const isLogin = path === "/login";
+  const isAdminRoute = path === "/admin" || path.startsWith("/admin/");
+
+  // Old admin login URL → shared /login
+  if (path === "/admin/login") {
+    const login = request.nextUrl.clone();
+    login.pathname = "/login";
+    return NextResponse.redirect(login);
+  }
+
   // Missing env on Vercel would otherwise crash proxy/middleware
   if (!url || !anonKey) {
     console.error(
       "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY"
     );
-    const path = request.nextUrl.pathname;
-    if (path !== "/login") {
+    if (!isLogin) {
       const login = request.nextUrl.clone();
       login.pathname = "/login";
       return NextResponse.redirect(login);
@@ -42,8 +53,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-  const isLogin = path === "/login";
+  const adminUser = Boolean(user && isAdminEmail(user.email));
 
   if (!user && !isLogin) {
     const login = request.nextUrl.clone();
@@ -52,9 +62,16 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && isLogin) {
-    const home = request.nextUrl.clone();
-    home.pathname = "/";
-    return NextResponse.redirect(home);
+    const dest = request.nextUrl.clone();
+    dest.pathname = adminUser ? "/admin" : "/";
+    return NextResponse.redirect(dest);
+  }
+
+  // Only the hardcoded admin email may access /admin
+  if (user && isAdminRoute && !adminUser) {
+    const dest = request.nextUrl.clone();
+    dest.pathname = "/";
+    return NextResponse.redirect(dest);
   }
 
   return supabaseResponse;

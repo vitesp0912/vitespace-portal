@@ -4,7 +4,7 @@ import type { ActionItem } from "@/types";
 export function getActionItemHref(item: ActionItem): string {
   switch (item.type) {
     case "approval":
-      return "/approvals";
+      return "/progress";
     case "data_required":
       return "/progress?tab=awaiting_client";
     case "change_request":

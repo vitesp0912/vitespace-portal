@@ -13,7 +13,10 @@ export default function MessagesAdminPage({
   const { id } = use(params);
   return (
     <AdminClientLayout clientId={id}>
-      <AdminClientPage title="Messages" description="Conversation threads on the client Messages page.">
+      <AdminClientPage
+        title="Messages"
+        description="Chat with this client — same conversation they see in the portal."
+      >
         <MessagesManager clientId={id} />
       </AdminClientPage>
     </AdminClientLayout>

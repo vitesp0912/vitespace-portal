@@ -9,18 +9,20 @@ import {
   useState,
 } from "react";
 import type { User } from "@supabase/supabase-js";
+import { isAdminEmail } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/client";
 import { resolveUserAccess } from "@/lib/supabase/data";
 
 export interface ClientSession {
   email: string;
-  clientId: string;
+  /** Null for admin-only sessions (no client_users link). */
+  clientId: string | null;
   userId: string;
   isAdmin: boolean;
 }
 
 type LoginResult =
-  | { ok: true; clientId: string; isAdmin: boolean }
+  | { ok: true; clientId: string | null; isAdmin: boolean }
   | { ok: false; error: string };
 
 type ClientAuthContextValue = {
@@ -35,6 +37,32 @@ type ClientAuthContextValue = {
 
 const ClientAuthContext = createContext<ClientAuthContextValue | null>(null);
 
+function sessionFromAccess(
+  authUser: User,
+  access: { clientId: string | null; isAdmin: boolean }
+): ClientSession | null {
+  const email = authUser.email ?? "";
+  const admin = isAdminEmail(email);
+
+  if (admin) {
+    return {
+      email,
+      userId: authUser.id,
+      isAdmin: true,
+      clientId: access.clientId,
+    };
+  }
+
+  if (!access.clientId) return null;
+
+  return {
+    email,
+    userId: authUser.id,
+    isAdmin: false,
+    clientId: access.clientId,
+  };
+}
+
 export function ClientAuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<ClientSession | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -46,9 +74,9 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
   const buildSession = useCallback(async (authUser: User) => {
     const supabase = createClient();
     const access = await resolveUserAccess(supabase, authUser.id);
+    const next = sessionFromAccess(authUser, access);
 
-    // Client portal only for now — must be linked in client_users
-    if (!access.clientId) {
+    if (!next) {
       await supabase.auth.signOut();
       setUser(null);
       setSession(null);
@@ -56,12 +84,15 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       return null;
     }
 
-    const next: ClientSession = {
-      email: authUser.email ?? "",
-      userId: authUser.id,
-      isAdmin: access.isAdmin,
-      clientId: access.clientId,
-    };
+    // Non-admin accounts must stay linked to a client
+    if (!next.isAdmin && !next.clientId) {
+      await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
+      setPreview(null);
+      return null;
+    }
+
     setUser(authUser);
     setSession(next);
     return next;
@@ -104,9 +135,12 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
 
   const login = useCallback(
     async (email: string, password: string): Promise<LoginResult> => {
+      const trimmed = email.trim();
+      const wantsAdmin = isAdminEmail(trimmed);
+
       const supabase = createClient();
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: trimmed,
         password,
       });
 
@@ -116,8 +150,20 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
 
       try {
         const access = await resolveUserAccess(supabase, data.user.id);
-        // Client portal focus: require a client_users link (admin role ignored for now)
-        if (!access.clientId) {
+        const next = sessionFromAccess(data.user, {
+          clientId: access.clientId,
+          isAdmin: access.isAdmin,
+        });
+
+        if (wantsAdmin) {
+          if (!next?.isAdmin || !isAdminEmail(data.user.email)) {
+            await supabase.auth.signOut();
+            return {
+              ok: false,
+              error: "Only the Vitespace team admin account can sign in as admin.",
+            };
+          }
+        } else if (!next?.clientId) {
           await supabase.auth.signOut();
           return {
             ok: false,
@@ -125,12 +171,11 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
           };
         }
 
-        const next: ClientSession = {
-          email: data.user.email ?? email.trim(),
-          userId: data.user.id,
-          isAdmin: access.isAdmin,
-          clientId: access.clientId,
-        };
+        if (!next) {
+          await supabase.auth.signOut();
+          return { ok: false, error: "Could not resolve account access." };
+        }
+
         setUser(data.user);
         setSession(next);
         setPreview(null);

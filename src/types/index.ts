@@ -1,8 +1,15 @@
-export type WorkItemStatus =
-  | "completed"
+export type TaskStatus =
+  | "pending"
+  | "requested"
+  | "pending_approval"
+  | "approved"
   | "in_progress"
-  | "upcoming"
-  | "awaiting_client";
+  | "completed"
+  | "rejected"
+  | "cancelled";
+
+/** @deprecated Use TaskStatus — kept as alias for gradual migration */
+export type WorkItemStatus = TaskStatus;
 
 export type ProjectStatus = "on_track" | "at_risk" | "blocked" | "completed";
 
@@ -54,18 +61,29 @@ export interface Client {
   lastUpdatedAt: string;
 }
 
+export interface Service {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface WorkItem {
   id: string;
   clientId: string;
+  serviceId: string;
+  /** Joined from services.name for display */
+  serviceName: string;
+  parentId?: string;
   title: string;
-  status: WorkItemStatus;
-  project: string;
   description?: string;
-  stages?: string[];
-  currentStage?: number;
-  progress?: number;
-  completedAt?: string;
-  dueDate?: string;
+  status: TaskStatus;
+  createdBy: "client" | "vitespace";
+  createdByUserId?: string;
+  createdByEmail?: string;
+  timelineStart?: string;
+  timelineEnd?: string;
+  /** Inclusive day count from start→end (same day = 1) */
+  days?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -137,10 +155,11 @@ export interface Document {
   category: DocumentCategory;
   uploadedAt: string;
   size: string;
-  project?: string;
   fileUrl?: string;
   mimeType?: string;
+  uploadedBy?: "client" | "vitespace";
   uploadedByUserId?: string;
+  uploadedByEmail?: string;
   editedAt?: string;
 }
 

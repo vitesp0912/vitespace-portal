@@ -132,7 +132,12 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
       };
 
       if (editing) {
-        updateInvoice(editing.id, {
+        // Upload upserts by invoice number — prefer API id so local matches DB
+        if (local.id !== editing.id) {
+          deleteInvoice(editing.id);
+        }
+        addInvoice(clientId, {
+          id: local.id,
           number: local.number,
           title: local.title,
           amount: local.amount,
@@ -145,6 +150,7 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
         });
       } else {
         addInvoice(clientId, {
+          id: local.id,
           number: local.number,
           title: local.title,
           amount: local.amount,
@@ -166,31 +172,30 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-between gap-4">
-        <p className="text-[13px] text-muted-foreground">
-          {invoices.length} invoice(s). Files go to R2 under{" "}
-          <span className="font-medium text-foreground">
-            {client?.company || "Company"}/invoices/
-          </span>
-        </p>
+      <div className="flex justify-end">
         <Button onClick={openCreate} className="rounded-full">
           <Plus className="mr-1.5 h-4 w-4" />
           Add Invoice
         </Button>
       </div>
       <ul className="divide-y divide-border/60 rounded-2xl bg-card ring-1 ring-border/80">
-        {invoices.map((inv) => (
+        {invoices.length === 0 ? (
+          <li className="px-5 py-10 text-center text-[13px] text-muted-foreground">
+            No invoices yet.
+          </li>
+        ) : (
+          invoices.map((inv) => (
           <li
             key={inv.id}
             className="group flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
           >
-            <div>
+            <div className="min-w-0">
               <span className="font-mono text-[11px] text-muted-foreground">{inv.number}</span>
               <p className="text-[14px] font-medium">{inv.title}</p>
               <p className="mt-0.5 text-[18px] font-semibold tabular-nums">
                 {formatCurrency(inv.amount)}
               </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
+              <p className="mt-1 truncate text-[12px] text-muted-foreground">
                 {INVOICE_STATUS_LABELS[inv.status]} · Issued {formatDate(inv.issuedAt)} · Due{" "}
                 {formatDate(inv.dueAt)}
                 {inv.fileName ? ` · ${inv.fileName}` : ""}
@@ -239,14 +244,15 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
               </Button>
             </div>
           </li>
-        ))}
+          ))
+        )}
       </ul>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-full max-w-[calc(100%-2rem)] overflow-x-hidden sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit" : "Add"} Invoice</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-1">
+          <div className="grid min-w-0 max-w-full gap-4 overflow-x-hidden py-1">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Invoice #</Label>
@@ -296,8 +302,10 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
                   value={form.status}
                   onValueChange={(v) => v && setForm({ ...form, status: v as InvoiceStatus })}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {INVOICE_STATUS_LABELS[form.status]}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(INVOICE_STATUS_LABELS).map(([k, l]) => (
@@ -309,18 +317,36 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
                 </Select>
               </div>
             </div>
-            <div className="space-y-1.5">
+            <div className="min-w-0 max-w-full space-y-1.5 overflow-hidden">
               <Label>Invoice file {!editing && "(required)"}</Label>
-              <Input
+              <input
                 type="file"
                 accept=".pdf,.png,.jpg,.jpeg,.webp"
+                className="sr-only"
+                id="invoice-file-input"
+                disabled={uploading}
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
-              <p className="text-[11px] text-muted-foreground">
-                Stored as{" "}
-                {client?.company || "Company"}
-                /invoices/
-                {file?.name || "filename.pdf"}
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                disabled={uploading}
+                onClick={() =>
+                  document.getElementById("invoice-file-input")?.click()
+                }
+              >
+                Choose file
+              </Button>
+              <p
+                className="max-w-full overflow-hidden break-all text-[13px] text-muted-foreground"
+                title={file?.name}
+              >
+                {file
+                  ? file.name
+                  : editing?.fileName
+                    ? `Current: ${editing.fileName}`
+                    : "No file chosen"}
               </p>
             </div>
             {error && <p className="text-[13px] text-red-600">{error}</p>}
@@ -334,7 +360,7 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
             >
               Cancel
             </Button>
-            <Button onClick={handleSubmit} className="rounded-full" disabled={uploading}>
+            <Button onClick={() => void handleSubmit()} className="rounded-full" disabled={uploading}>
               {uploading && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               {editing ? "Save" : "Upload & Add"}
             </Button>

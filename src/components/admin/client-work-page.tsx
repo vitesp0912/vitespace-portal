@@ -10,13 +10,17 @@ interface ClientWorkPageProps {
 }
 
 export function ClientWorkPage({ clientId }: ClientWorkPageProps) {
-  const { getClient } = usePortal();
+  const { getClient, loadingData } = usePortal();
   const client = getClient(clientId);
 
   if (!client) {
     return (
       <AdminClientLayout clientId={clientId}>
-        <AdminClientPage title="Work Items"><p className="text-muted-foreground">Client not found.</p></AdminClientPage>
+        <AdminClientPage title="Work Items">
+          <p className="text-muted-foreground">
+            {loadingData ? "Loading…" : "Client not found."}
+          </p>
+        </AdminClientPage>
       </AdminClientLayout>
     );
   }

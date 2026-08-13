@@ -1,23 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
   LayoutGrid,
   ListTodo,
-  ExternalLink,
+  LogOut,
   Settings,
-  FileText,
-  CheckCircle2,
   Receipt,
   FolderOpen,
   MessageSquare,
-  Map,
   Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useClientAuth } from "@/lib/client-auth";
 
 interface AdminShellProps {
   clientId?: string;
@@ -29,23 +27,27 @@ const CLIENT_SECTIONS = (clientId: string) => [
   { href: `/admin/clients/${clientId}`, label: "Overview", icon: LayoutGrid, end: true },
   { href: `/admin/clients/${clientId}/settings`, label: "Settings", icon: Settings },
   { href: `/admin/clients/${clientId}/work`, label: "Work Items", icon: ListTodo },
-  { href: `/admin/clients/${clientId}/requests`, label: "Requests", icon: FileText },
-  { href: `/admin/clients/${clientId}/approvals`, label: "Approvals", icon: CheckCircle2 },
   { href: `/admin/clients/${clientId}/invoices`, label: "Invoices", icon: Receipt },
   { href: `/admin/clients/${clientId}/documents`, label: "Documents", icon: FolderOpen },
   { href: `/admin/clients/${clientId}/messages`, label: "Messages", icon: MessageSquare },
-  { href: `/admin/clients/${clientId}/roadmap`, label: "Roadmap", icon: Map },
   { href: `/admin/clients/${clientId}/notifications`, label: "Notifications", icon: Bell },
 ];
 
 export function AdminShell({ clientId, clientName, children }: AdminShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useClientAuth();
   const isClientView = Boolean(clientId);
   const clientTabs = clientId ? CLIENT_SECTIONS(clientId) : [];
 
   function isActive(href: string, end?: boolean) {
     if (end) return pathname === href;
     return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  async function handleLogout() {
+    await logout();
+    router.replace("/login");
   }
 
   return (
@@ -106,13 +108,14 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
         </nav>
 
         <div className="space-y-1 border-t border-sidebar-border p-3">
-          <Link
-            href="/"
-            className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-sidebar-foreground transition-colors hover:bg-white/[0.06] hover:text-white"
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-sidebar-foreground transition-colors hover:bg-white/[0.06] hover:text-white"
           >
-            <ExternalLink className="h-4 w-4 shrink-0 opacity-70" />
-            Client Portal
-          </Link>
+            <LogOut className="h-4 w-4 shrink-0 opacity-70" />
+            Sign out
+          </button>
         </div>
       </aside>
 

@@ -11,6 +11,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useClientAuth } from "@/lib/client-auth";
 
 const navItems = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -23,6 +24,8 @@ const navItems = [
 
 export function PortalSidebar() {
   const pathname = usePathname();
+  const { session } = useClientAuth();
+  const showAdminLink = Boolean(session?.isAdmin);
 
   return (
     <aside className="flex w-[220px] shrink-0 flex-col border-r border-border bg-sidebar">
@@ -58,14 +61,16 @@ export function PortalSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-border p-2">
-        <Link
-          href="/admin"
-          className="block rounded-md px-2.5 py-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-        >
-          Internal admin →
-        </Link>
-      </div>
+      {showAdminLink && (
+        <div className="border-t border-border p-2">
+          <Link
+            href="/admin"
+            className="block rounded-md px-2.5 py-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          >
+            Internal admin →
+          </Link>
+        </div>
+      )}
     </aside>
   );
 }

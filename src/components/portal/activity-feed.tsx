@@ -1,17 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, FileCheck, Sparkles, Globe, PenLine } from "lucide-react";
+import {
+  ArrowRight,
+  FileCheck,
+  Sparkles,
+  Globe,
+  PenLine,
+  XCircle,
+  Ban,
+  CheckCircle2,
+  Clock,
+} from "lucide-react";
 import { useClientPortal } from "@/lib/portal-store";
 import { formatShortRelative } from "@/lib/format";
 import { StatusPill } from "./status-pill";
-import type { WorkItemStatus } from "@/types";
+import type { TaskStatus } from "@/types";
 
-const activityIcons: Record<WorkItemStatus, typeof FileCheck> = {
+const activityIcons: Record<TaskStatus, typeof FileCheck> = {
+  pending: Clock,
   completed: FileCheck,
   in_progress: Sparkles,
-  upcoming: PenLine,
-  awaiting_client: Globe,
+  approved: CheckCircle2,
+  requested: PenLine,
+  pending_approval: Globe,
+  rejected: XCircle,
+  cancelled: Ban,
 };
 
 export function ActivityFeed() {
@@ -24,7 +38,10 @@ export function ActivityFeed() {
     <section>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-[15px] font-semibold tracking-tight">Recent Activity</h2>
-        <Link href="/progress" className="group flex items-center gap-1 text-[12px] font-medium text-muted-foreground transition-colors hover:text-brand">
+        <Link
+          href="/progress"
+          className="group flex items-center gap-1 text-[12px] font-medium text-muted-foreground transition-colors hover:text-brand"
+        >
           View all
           <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
         </Link>
@@ -40,7 +57,9 @@ export function ActivityFeed() {
                   <Icon className="h-3.5 w-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-medium leading-snug">{activity.title}</p>
+                  <p className="text-[14px] font-medium leading-snug">
+                    {activity.title}
+                  </p>
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
                     <StatusPill status={activity.status} />
                     <span className="text-[12px] text-muted-foreground">

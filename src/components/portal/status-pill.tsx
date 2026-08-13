@@ -1,26 +1,16 @@
 import { cn } from "@/lib/utils";
-import type { WorkItemStatus, ProjectStatus } from "@/types";
+import type { TaskStatus, ProjectStatus } from "@/types";
+import { WORK_ITEM_STATUS_LABELS } from "@/lib/constants";
 
-const workStatusConfig: Record<
-  WorkItemStatus,
-  { label: string; className: string }
-> = {
-  completed: {
-    label: "Completed",
-    className: "bg-emerald-500/10 text-emerald-700",
-  },
-  in_progress: {
-    label: "In Progress",
-    className: "bg-indigo-500/10 text-indigo-700",
-  },
-  upcoming: {
-    label: "Upcoming",
-    className: "bg-zinc-500/10 text-zinc-600",
-  },
-  awaiting_client: {
-    label: "Awaiting You",
-    className: "bg-amber-500/10 text-amber-700",
-  },
+const workStatusClass: Record<TaskStatus, string> = {
+  pending: "bg-orange-500/10 text-orange-700",
+  completed: "bg-emerald-500/10 text-emerald-700",
+  in_progress: "bg-indigo-500/10 text-indigo-700",
+  approved: "bg-zinc-500/10 text-zinc-600",
+  requested: "bg-sky-500/10 text-sky-700",
+  pending_approval: "bg-amber-500/10 text-amber-700",
+  rejected: "bg-red-500/10 text-red-700",
+  cancelled: "bg-zinc-500/10 text-zinc-500",
 };
 
 const projectStatusConfig: Record<
@@ -53,7 +43,7 @@ export function StatusPill({
   status,
   variant = "work",
 }: {
-  status: WorkItemStatus | ProjectStatus;
+  status: TaskStatus | ProjectStatus;
   variant?: "work" | "project";
 }) {
   if (variant === "project") {
@@ -71,15 +61,15 @@ export function StatusPill({
     );
   }
 
-  const config = workStatusConfig[status as WorkItemStatus];
+  const taskStatus = status as TaskStatus;
   return (
     <span
       className={cn(
         "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
-        config.className
+        workStatusClass[taskStatus]
       )}
     >
-      {config.label}
+      {WORK_ITEM_STATUS_LABELS[taskStatus]}
     </span>
   );
 }

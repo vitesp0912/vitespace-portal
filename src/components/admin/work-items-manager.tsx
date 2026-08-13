@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,38 +20,41 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { useClientAuth } from "@/lib/client-auth";
 import { usePortal } from "@/lib/portal-store";
-import {
-  PROJECT_OPTIONS,
-  WORK_ITEM_STATUS_LABELS,
-} from "@/lib/constants";
+import { TASK_STATUS_ORDER, WORK_ITEM_STATUS_LABELS } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
-import type { WorkItem, WorkItemStatus } from "@/types";
+import { taskInclusiveDays } from "@/lib/tasks";
+import type { TaskStatus, WorkItem } from "@/types";
 import { cn } from "@/lib/utils";
 
-const statusStyles: Record<WorkItemStatus, string> = {
-  completed: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
+const statusStyles: Record<TaskStatus, string> = {
+  pending: "bg-orange-500/10 text-orange-400 ring-orange-500/20",
+  requested: "bg-sky-500/10 text-sky-400 ring-sky-500/20",
+  pending_approval: "bg-amber-500/10 text-amber-400 ring-amber-500/20",
+  approved: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/20",
   in_progress: "bg-brand/10 text-brand ring-brand/20",
-  upcoming: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/20",
-  awaiting_client: "bg-amber-500/10 text-amber-400 ring-amber-500/20",
+  completed: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
+  rejected: "bg-red-500/10 text-red-400 ring-red-500/20",
+  cancelled: "bg-zinc-500/10 text-zinc-500 ring-zinc-500/20",
 };
 
 interface WorkItemFormState {
   title: string;
-  status: WorkItemStatus;
-  project: string;
+  status: TaskStatus;
+  serviceId: string;
   description: string;
-  dueDate: string;
-  progress: string;
+  timelineStart: string;
+  timelineEnd: string;
 }
 
 const emptyForm = (): WorkItemFormState => ({
   title: "",
-  status: "in_progress",
-  project: "Website",
+  status: "pending",
+  serviceId: "",
   description: "",
-  dueDate: "",
-  progress: "",
+  timelineStart: "",
+  timelineEnd: "",
 });
 
 interface WorkItemsManagerProps {
@@ -63,53 +66,142 @@ export function WorkItemsManager({
   clientId,
   clientName,
 }: WorkItemsManagerProps) {
+  const { session } = useClientAuth();
   const {
     getWorkItemsForClient,
+    getServices,
     addWorkItem,
     updateWorkItem,
     deleteWorkItem,
   } = usePortal();
 
   const items = getWorkItemsForClient(clientId);
+  const services = getServices();
+  const serviceNameById = useMemo(
+    () => Object.fromEntries(services.map((s) => [s.id, s.name])),
+    [services]
+  );
+
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
+  const [serviceFilter, setServiceFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [form, setForm] = useState<WorkItemFormState>(emptyForm());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const previewDays = taskInclusiveDays(form.timelineStart, form.timelineEnd);
+
+  const filteredItems = useMemo(() => {
+    const statusRank = Object.fromEntries(
+      TASK_STATUS_ORDER.map((s, i) => [s, i])
+    ) as Record<TaskStatus, number>;
+
+    return items
+      .filter((item) =>
+        statusFilter === "all" ? true : item.status === statusFilter
+      )
+      .filter((item) =>
+        serviceFilter === "all" ? true : item.serviceId === serviceFilter
+      )
+      .sort((a, b) => {
+        const rankA = statusRank[a.status] ?? 99;
+        const rankB = statusRank[b.status] ?? 99;
+        if (rankA !== rankB) return rankA - rankB;
+        return a.title.localeCompare(b.title);
+      });
+  }, [items, statusFilter, serviceFilter]);
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyForm());
+    setError(null);
+    setForm({
+      ...emptyForm(),
+      serviceId: services[0]?.id ?? "",
+    });
     setDialogOpen(true);
   }
 
   function openEdit(item: WorkItem) {
     setEditing(item);
+    setError(null);
     setForm({
       title: item.title,
       status: item.status,
-      project: item.project,
+      serviceId: item.serviceId,
       description: item.description ?? "",
-      dueDate: item.dueDate ?? "",
-      progress: item.progress?.toString() ?? "",
+      timelineStart: item.timelineStart ?? "",
+      timelineEnd: item.timelineEnd ?? "",
     });
     setDialogOpen(true);
   }
 
-  function handleSubmit() {
-    if (!form.title.trim()) return;
+  function setStartDate(value: string) {
+    setForm((prev) => {
+      const next = { ...prev, timelineStart: value };
+      if (value && prev.timelineEnd && prev.timelineEnd < value) {
+        next.timelineEnd = value;
+      }
+      return next;
+    });
+  }
 
+  function setEndDate(value: string) {
+    setForm((prev) => {
+      if (value && prev.timelineStart && value < prev.timelineStart) {
+        setError("End date cannot be earlier than the start date.");
+        return prev;
+      }
+      setError(null);
+      return { ...prev, timelineEnd: value };
+    });
+  }
+
+  async function handleSubmit() {
+    if (!form.title.trim()) return;
+    if (!form.serviceId) {
+      setError("Add a global service on the admin home page first.");
+      return;
+    }
+    if (!session?.userId) {
+      setError("You must be signed in to create a task.");
+      return;
+    }
+    if (
+      form.timelineStart &&
+      form.timelineEnd &&
+      form.timelineEnd < form.timelineStart
+    ) {
+      setError("End date cannot be earlier than the start date.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    const createdBy: "client" | "vitespace" = session.isAdmin
+      ? "vitespace"
+      : "client";
     const payload = {
       title: form.title,
       status: form.status,
-      project: form.project,
+      serviceId: form.serviceId,
       description: form.description || undefined,
-      dueDate: form.dueDate || undefined,
-      progress: form.progress ? Number(form.progress) : undefined,
+      timelineStart: form.timelineStart || undefined,
+      timelineEnd: form.timelineEnd || undefined,
+      createdBy,
+      createdByUserId: session.userId,
+      createdByEmail: session.email || undefined,
     };
 
-    if (editing) {
-      updateWorkItem(editing.id, payload);
-    } else {
-      addWorkItem(clientId, payload);
+    const result = editing
+      ? await updateWorkItem(editing.id, payload)
+      : await addWorkItem(clientId, payload);
+
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
     }
 
     setDialogOpen(false);
@@ -117,223 +209,412 @@ export function WorkItemsManager({
     setForm(emptyForm());
   }
 
-  function handleDelete(id: string) {
-    if (confirm("Delete this work item? This cannot be undone.")) {
-      deleteWorkItem(id);
+  async function handleStatusChange(item: WorkItem, status: TaskStatus) {
+    if (status === item.status) return;
+    const result = await updateWorkItem(item.id, { status });
+    if (!result.ok) alert(result.error);
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this task? This cannot be undone.")) return;
+    setSaving(true);
+    setError(null);
+    const result = await deleteWorkItem(id);
+    setSaving(false);
+    if (!result.ok) {
+      alert(result.error);
+      return;
     }
+    setDialogOpen(false);
+    setEditing(null);
+  }
+
+  function statusLabel(status: TaskStatus) {
+    return WORK_ITEM_STATUS_LABELS[status] ?? status;
   }
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[13px] text-muted-foreground">
-          {items.length} item{items.length !== 1 ? "s" : ""} visible to{" "}
-          {clientName}
+          {filteredItems.length}
+          {filteredItems.length !== items.length
+            ? ` of ${items.length}`
+            : ""}{" "}
+          task{filteredItems.length !== 1 ? "s" : ""} for {clientName}
+          {services.length === 0 && (
+            <span className="text-amber-500">
+              {" "}
+              · Add global services on the admin home page first.
+            </span>
+          )}
         </p>
-        <Button onClick={openCreate} className="rounded-full">
+        <Button
+          onClick={openCreate}
+          className="rounded-full self-start sm:self-auto"
+          disabled={services.length === 0}
+        >
           <Plus className="mr-1.5 h-4 w-4" />
-          Add Work Item
+          Add Task
         </Button>
       </div>
 
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div className="w-full sm:w-[200px]">
+          <Select
+            value={statusFilter}
+            onValueChange={(v) =>
+              v && setStatusFilter(v as TaskStatus | "all")
+            }
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {statusFilter === "all"
+                  ? "All statuses"
+                  : WORK_ITEM_STATUS_LABELS[statusFilter]}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {TASK_STATUS_ORDER.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {WORK_ITEM_STATUS_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-full sm:w-[200px]">
+          <Select
+            value={serviceFilter}
+            onValueChange={(v) => v && setServiceFilter(v)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {serviceFilter === "all"
+                  ? "All services"
+                  : serviceNameById[serviceFilter] ?? "Service"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All services</SelectItem>
+              {services.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-2xl ring-1 ring-border/80">
-        {/* Header row */}
-        <div className="hidden grid-cols-[1fr_120px_130px_100px_72px] gap-4 border-b border-border/60 bg-muted/30 px-5 py-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground sm:grid">
+        <div className="hidden grid-cols-[minmax(0,1.2fr)_120px_minmax(150px,200px)_72px_160px_80px] gap-3 border-b border-border/60 bg-muted/30 px-5 py-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground lg:grid">
           <span>Title</span>
-          <span>Project</span>
+          <span>Service</span>
           <span>Status</span>
-          <span>Due</span>
+          <span>Days</span>
+          <span>Dates</span>
           <span />
         </div>
 
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-5 py-16 text-center">
-            <p className="text-[14px] font-medium text-foreground">
-              No work items yet
-            </p>
+            <p className="text-[14px] font-medium text-foreground">No tasks yet</p>
             <p className="mt-1 max-w-xs text-[13px] text-muted-foreground">
-              Add progress items to show {clientName} what&apos;s happening.
+              Tasks use the schema fields and must link to a service.
             </p>
-            <Button onClick={openCreate} className="mt-4 rounded-full" size="sm">
+            <Button
+              onClick={openCreate}
+              className="mt-4 rounded-full"
+              size="sm"
+              disabled={services.length === 0}
+            >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add first item
+              Add first task
             </Button>
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="px-5 py-12 text-center text-[13px] text-muted-foreground">
+            No tasks match these filters.
           </div>
         ) : (
           <ul className="divide-y divide-border/60">
-            {items.map((item) => (
-              <li
-                key={item.id}
-                className="admin-lift group grid grid-cols-1 gap-3 px-5 py-4 transition-colors hover:bg-muted/20 sm:grid-cols-[1fr_120px_130px_100px_72px] sm:items-center sm:gap-4"
-              >
-                <div>
-                  <p className="text-[14px] font-medium">{item.title}</p>
-                  {item.description && (
-                    <p className="mt-0.5 text-[12px] text-muted-foreground line-clamp-1">
-                      {item.description}
+            {filteredItems.map((item) => {
+              const days =
+                item.days ??
+                taskInclusiveDays(item.timelineStart, item.timelineEnd);
+              return (
+                <li
+                  key={item.id}
+                  className="admin-lift group grid grid-cols-1 gap-3 px-5 py-4 transition-colors hover:bg-muted/20 lg:grid-cols-[minmax(0,1.2fr)_120px_minmax(150px,200px)_72px_160px_80px] lg:items-center lg:gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-medium" title={item.title}>
+                      {item.title}
                     </p>
-                  )}
-                  {/* Mobile-only meta */}
-                  <div className="mt-2 flex flex-wrap gap-2 sm:hidden">
-                    <span className="text-[12px] text-muted-foreground">
-                      {item.project}
-                    </span>
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
-                        statusStyles[item.status]
-                      )}
-                    >
-                      {WORK_ITEM_STATUS_LABELS[item.status]}
-                    </span>
-                  </div>
-                </div>
-                <span className="hidden text-[13px] text-muted-foreground sm:block">
-                  {item.project}
-                </span>
-                <span className="hidden sm:block">
-                  <span
-                    className={cn(
-                      "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
-                      statusStyles[item.status]
+                    {item.description && (
+                      <p className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">
+                        {item.description}
+                      </p>
                     )}
-                  >
-                    {WORK_ITEM_STATUS_LABELS[item.status]}
+                    <div className="mt-2 flex flex-wrap items-center gap-2 lg:hidden">
+                      <span className="text-[12px] text-muted-foreground">
+                        {item.serviceName}
+                      </span>
+                      <Select
+                        value={item.status}
+                        onValueChange={(v) =>
+                          v && void handleStatusChange(item, v as TaskStatus)
+                        }
+                      >
+                        <SelectTrigger
+                          className={cn(
+                            "h-7 w-auto min-w-0 gap-1 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ring-1",
+                            statusStyles[item.status]
+                          )}
+                        >
+                          <SelectValue>{statusLabel(item.status)}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TASK_STATUS_ORDER.map((value) => (
+                            <SelectItem key={value} value={value}>
+                              {WORK_ITEM_STATUS_LABELS[value]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {days != null && (
+                        <span className="text-[12px] text-muted-foreground">
+                          {days} day{days === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="hidden truncate text-[13px] text-muted-foreground lg:block">
+                    {item.serviceName}
                   </span>
-                </span>
-                <span className="hidden text-[13px] text-muted-foreground sm:block">
-                  {item.dueDate ? formatDate(item.dueDate) : "—"}
-                </span>
-                <div className="flex justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="rounded-full"
-                    onClick={() => openEdit(item)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="rounded-full text-muted-foreground hover:text-destructive"
-                    onClick={() => handleDelete(item.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </li>
-            ))}
+                  <div className="hidden min-w-0 lg:block">
+                    <Select
+                      value={item.status}
+                      onValueChange={(v) =>
+                        v && void handleStatusChange(item, v as TaskStatus)
+                      }
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          "h-7 w-full min-w-0 gap-1 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ring-1",
+                          statusStyles[item.status]
+                        )}
+                      >
+                        <SelectValue>{statusLabel(item.status)}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TASK_STATUS_ORDER.map((value) => (
+                          <SelectItem key={value} value={value}>
+                            {WORK_ITEM_STATUS_LABELS[value]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <span className="hidden text-[13px] tabular-nums text-muted-foreground lg:block">
+                    {days != null ? days : "—"}
+                  </span>
+                  <span className="hidden text-[12px] text-muted-foreground lg:block">
+                    {item.timelineStart || item.timelineEnd
+                      ? `${item.timelineStart ? formatDate(item.timelineStart) : "—"} → ${item.timelineEnd ? formatDate(item.timelineEnd) : "—"}`
+                      : "—"}
+                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="rounded-full"
+                        title="Edit"
+                        onClick={() => openEdit(item)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="rounded-full text-muted-foreground hover:text-destructive"
+                        title="Delete"
+                        aria-label="Delete task"
+                        disabled={saving}
+                        onClick={() => void handleDelete(item.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    {item.createdByEmail && (
+                      <p
+                        className="max-w-[140px] truncate text-right text-[10px] text-muted-foreground/80"
+                        title={item.createdByEmail}
+                      >
+                        {item.createdByEmail}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              {editing ? "Edit Work Item" : "Add Work Item"}
-            </DialogTitle>
+            <DialogTitle>{editing ? "Edit Task" : "Add Task"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-1">
             <div className="space-y-1.5">
-              <Label htmlFor="wi-title">Title</Label>
+              <Label htmlFor="task-title">Title</Label>
               <Input
-                id="wi-title"
+                id="task-title"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="e.g. Forest Walk Villa page"
+                placeholder="e.g. Homepage redesign"
               />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Service</Label>
+                <Select
+                  value={form.serviceId || null}
+                  onValueChange={(v) =>
+                    v && setForm({ ...form, serviceId: String(v) })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select service">
+                      {form.serviceId
+                        ? serviceNameById[form.serviceId]
+                        : null}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {services.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1.5">
                 <Label>Status</Label>
                 <Select
                   value={form.status}
                   onValueChange={(v) =>
-                    v && setForm({ ...form, status: v as WorkItemStatus })
+                    v && setForm({ ...form, status: v as TaskStatus })
                   }
                 >
-                  <SelectTrigger>
-                    <SelectValue />
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select status">
+                      {statusLabel(form.status)}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(WORK_ITEM_STATUS_LABELS).map(
-                      ([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      )
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Project</Label>
-                <Select
-                  value={form.project}
-                  onValueChange={(v) => v && setForm({ ...form, project: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PROJECT_OPTIONS.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
+                    {TASK_STATUS_ORDER.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {WORK_ITEM_STATUS_LABELS[value]}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="wi-desc">Description (optional)</Label>
+              <Label htmlFor="task-desc">Description</Label>
               <Textarea
-                id="wi-desc"
+                id="task-desc"
                 value={form.description}
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
                 }
                 rows={2}
-                placeholder="Client-facing notes"
+                placeholder="Optional"
               />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="wi-due">Due date</Label>
+                <Label htmlFor="task-start">Start date</Label>
                 <Input
-                  id="wi-due"
+                  id="task-start"
                   type="date"
-                  value={form.dueDate}
-                  onChange={(e) =>
-                    setForm({ ...form, dueDate: e.target.value })
-                  }
+                  value={form.timelineStart}
+                  onChange={(e) => setStartDate(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="wi-progress">Progress %</Label>
+                <Label htmlFor="task-end">End date</Label>
                 <Input
-                  id="wi-progress"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={form.progress}
-                  onChange={(e) =>
-                    setForm({ ...form, progress: e.target.value })
-                  }
-                  placeholder="Optional"
+                  id="task-end"
+                  type="date"
+                  min={form.timelineStart || undefined}
+                  value={form.timelineEnd}
+                  onChange={(e) => setEndDate(e.target.value)}
                 />
               </div>
             </div>
+
+            <p className="text-[12px] text-muted-foreground">
+              Days:{" "}
+              <span
+                className={
+                  previewDays != null
+                    ? "font-medium text-brand"
+                    : "font-medium text-muted-foreground"
+                }
+              >
+                {previewDays != null
+                  ? `${previewDays} day${previewDays === 1 ? "" : "s"}`
+                  : "—"}
+              </span>
+            </p>
+
+            {error && <p className="text-[13px] text-red-600">{error}</p>}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} className="rounded-full">
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={!form.title.trim()} className="rounded-full">
-              {editing ? "Save Changes" : "Add Item"}
-            </Button>
+          <DialogFooter className="gap-2 sm:justify-between">
+            {editing ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full text-destructive hover:text-destructive"
+                disabled={saving}
+                onClick={() => void handleDelete(editing.id)}
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Delete
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setDialogOpen(false)}
+                className="rounded-full"
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void handleSubmit()}
+                disabled={!form.title.trim() || !form.serviceId || saving}
+                className="rounded-full"
+              >
+                {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                {editing ? "Save Changes" : "Add Task"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

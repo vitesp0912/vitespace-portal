@@ -5,14 +5,30 @@ import type {
   ProjectStatus,
   RequestStatus,
   RoadmapStatus,
-  WorkItemStatus,
+  TaskStatus,
 } from "@/types";
 
-export const WORK_ITEM_STATUS_LABELS: Record<WorkItemStatus, string> = {
-  completed: "Completed",
+/** Display / sort order for work items */
+export const TASK_STATUS_ORDER: TaskStatus[] = [
+  "pending",
+  "in_progress",
+  "requested",
+  "pending_approval",
+  "approved",
+  "completed",
+  "rejected",
+  "cancelled",
+];
+
+export const WORK_ITEM_STATUS_LABELS: Record<TaskStatus, string> = {
+  pending: "Pending",
   in_progress: "In Progress",
-  upcoming: "Upcoming",
-  awaiting_client: "Awaiting Client",
+  requested: "Requested",
+  pending_approval: "Pending Approval",
+  approved: "Approved",
+  completed: "Completed",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
 };
 
 export const PROJECT_OPTIONS = [

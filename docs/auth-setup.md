@@ -1,20 +1,10 @@
-# Client portal auth (Supabase)
+# Auth setup (Supabase)
 
-Admin / Vitespace role is deferred. For now only client users can sign in.
+## Client portal
 
-## SQL needed
-
-1. `001_clients.sql`
-2. `002_seed_client.sql` — creates `test-client` / Test Company  
-3. `003_core_tables.sql` — invoices, documents, messages, notifications, tasks  
-
-`004_admin_users.sql` is **optional** for now (skip unless you need admin later).
-
-## Link a client user
-
-1. **Authentication → Users → Add user** (email + password, Auto Confirm on)  
-2. Copy the User UID  
-3. Run:
+1. Run SQL: `001_clients.sql`, `002_seed_client.sql`, `003_core_tables.sql`
+2. **Authentication → Users → Add user** (email + password, Auto Confirm on)
+3. Link them in `client_users`:
 
 ```sql
 insert into client_users (user_id, client_id, role)
@@ -24,11 +14,27 @@ on conflict (user_id, client_id) do nothing;
 
 4. Sign in at `/login` → client portal at `/`
 
-## What the client can see (from DB)
+## Admin (Vitespace team)
+
+Only **`admin@vitespace.com`** can use the admin portal. Same `/login` page as clients.
+
+1. Run `004_admin_users.sql` (needed for admin RLS on all client data)
+2. Create Auth user **`admin@vitespace.com`** (password of your choice, Auto Confirm on)
+3. Link admin role:
+
+```sql
+insert into admin_users (user_id)
+values ('YOUR_ADMIN_AUTH_USER_UUID')
+on conflict (user_id) do nothing;
+```
+
+4. Sign in at **`/login`** with `admin@vitespace.com` → `/admin`
+
+App enforcement: admin routes only accept `admin@vitespace.com`. Other emails are rejected even if present in `admin_users`.
+
+## What clients can see
 
 - Client profile (`clients`)
-- Invoices / documents (with R2 download links when present)
+- Invoices / documents (R2 links when present)
 - Messages / notifications
-- Tasks (loaded in data layer; UI pages for old “work items” may still look empty)
-
-Use Supabase Table Editor or SQL to insert sample invoices/documents/messages for `test-client` while admin UI is on hold.
+- Tasks (via data layer)

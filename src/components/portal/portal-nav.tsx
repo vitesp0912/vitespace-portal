@@ -9,8 +9,7 @@ import { cn } from "@/lib/utils";
 
 export function PortalNavDesktop() {
   const pathname = usePathname();
-  const { actionItems, approvals } = useClientPortal();
-  const pendingApprovals = approvals.filter((a) => a.status === "pending").length;
+  const { actionItems } = useClientPortal();
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
@@ -27,12 +26,7 @@ export function PortalNavDesktop() {
         {portalNavItems.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
-          const badge =
-            item.href === "/approvals"
-              ? pendingApprovals
-              : item.href === "/"
-                ? actionItems.length
-                : 0;
+          const badge = item.href === "/" ? actionItems.length : 0;
 
           return (
             <Link

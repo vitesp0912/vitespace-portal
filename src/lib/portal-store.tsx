@@ -24,14 +24,17 @@ import type {
   ProjectStatus,
   RequestStatus,
   RoadmapItem,
+  Service,
+  TaskStatus,
   WorkItem,
-  WorkItemStatus,
 } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPortalSnapshot } from "@/lib/supabase/data";
+import { taskInclusiveDays, taskToWorkItem, workItemToTaskInsert } from "@/lib/tasks";
 
 export interface PortalState {
   clients: Client[];
+  services: Service[];
   workItems: WorkItem[];
   actionItems: ActionItem[];
   progressAreas: ProgressArea[];
@@ -47,6 +50,7 @@ export interface PortalState {
 
 const EMPTY_STATE: PortalState = {
   clients: [],
+  services: [],
   workItems: [],
   actionItems: [],
   progressAreas: [],
@@ -87,11 +91,19 @@ export interface ClientInput {
 
 export interface WorkItemInput {
   title: string;
-  status: WorkItemStatus;
-  project: string;
+  status: TaskStatus;
+  serviceId: string;
   description?: string;
-  dueDate?: string;
-  progress?: number;
+  timelineStart?: string;
+  timelineEnd?: string;
+  parentId?: string;
+  createdBy?: "client" | "vitespace";
+  createdByUserId?: string;
+  createdByEmail?: string;
+}
+
+export interface ServiceInput {
+  name: string;
 }
 
 export interface ActionItemInput {
@@ -127,6 +139,7 @@ export interface ApprovalInput {
 }
 
 export interface InvoiceInput {
+  id?: string;
   number: string;
   title: string;
   amount: number;
@@ -144,11 +157,12 @@ export interface DocumentInput {
   name: string;
   category: Document["category"];
   size: string;
-  project?: string;
   fileUrl?: string;
   description?: string;
   mimeType?: string;
+  uploadedBy?: Document["uploadedBy"];
   uploadedByUserId?: string;
+  uploadedByEmail?: string;
   editedAt?: string;
 }
 
@@ -183,6 +197,7 @@ type PortalContextValue = PortalState & {
     upcoming: number;
   };
   getWorkItemsForClient: (clientId: string) => WorkItem[];
+  getServices: () => Service[];
   getActionItemsForClient: (clientId: string) => ActionItem[];
   getProgressAreasForClient: (clientId: string) => ProgressArea[];
   getChangeRequestsForClient: (clientId: string) => ChangeRequest[];
@@ -193,13 +208,38 @@ type PortalContextValue = PortalState & {
   getRoadmapForClient: (clientId: string) => RoadmapItem[];
   getNotificationsForClient: (clientId: string) => Notification[];
   getOverallProgress: (clientId: string) => number;
-  addClient: (input: ClientInput) => Client;
-  updateClient: (id: string, input: Partial<ClientInput>) => void;
-  deleteClient: (id: string) => void;
+  addClient: (
+    input: ClientInput
+  ) => Promise<{ ok: true; client: Client } | { ok: false; error: string }>;
+  updateClient: (
+    id: string,
+    input: Partial<ClientInput>
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  deleteClient: (
+    id: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   touchClientUpdated: (clientId: string) => void;
-  addWorkItem: (clientId: string, input: WorkItemInput) => WorkItem;
-  updateWorkItem: (id: string, input: Partial<WorkItemInput>) => void;
-  deleteWorkItem: (id: string) => void;
+  addWorkItem: (
+    clientId: string,
+    input: WorkItemInput
+  ) => Promise<{ ok: true; item: WorkItem } | { ok: false; error: string }>;
+  updateWorkItem: (
+    id: string,
+    input: Partial<WorkItemInput>
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  deleteWorkItem: (
+    id: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  addService: (
+    input: ServiceInput
+  ) => Promise<{ ok: true; service: Service } | { ok: false; error: string }>;
+  updateService: (
+    id: string,
+    input: Partial<ServiceInput>
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  deleteService: (
+    id: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   addActionItem: (clientId: string, input: ActionItemInput) => ActionItem;
   updateActionItem: (id: string, input: Partial<ActionItemInput>) => void;
   deleteActionItem: (id: string) => void;
@@ -284,12 +324,15 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         setState((s) => ({
           ...s,
           clients: snapshot.clients,
+          services: snapshot.services,
           invoices: snapshot.invoices,
           documents: snapshot.documents,
           messages: snapshot.messages,
           notifications: snapshot.notifications,
-          // Legacy entities not in Supabase yet — keep empty (no hardcoded seed)
-          workItems: [],
+          workItems: snapshot.tasks.map((t) =>
+            taskToWorkItem(t, t.serviceName)
+          ),
+          // Legacy entities not in Supabase yet — keep empty
           actionItems: [],
           progressAreas: [],
           changeRequests: [],
@@ -330,16 +373,26 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     [state.workItems]
   );
 
+  const getServices = useCallback(
+    () => [...state.services].sort((a, b) => a.name.localeCompare(b.name)),
+    [state.services]
+  );
+
   const getClientStats = useCallback(
     (clientId: string) => {
       const items = filterClient(state.workItems, clientId);
       return {
         completed: items.filter((i) => i.status === "completed").length,
         inProgress: items.filter((i) => i.status === "in_progress").length,
-        awaitingClient: items.filter((i) => i.status === "awaiting_client").length,
-        upcoming: items.filter((i) => i.status === "upcoming").length,
+        awaitingClient: items.filter((i) => i.status === "pending_approval")
+          .length,
+        upcoming: items.filter((i) =>
+          ["requested", "approved"].includes(i.status)
+        ).length,
         completedThisMonth: items.filter(
-          (i) => i.status === "completed" && isThisMonth(i.completedAt)
+          (i) =>
+            i.status === "completed" &&
+            isThisMonth(i.updatedAt.split("T")[0])
         ).length,
         openRequests: filterClient(state.changeRequests, clientId).filter(
           (r) => !["completed", "rejected"].includes(r.status)
@@ -377,41 +430,47 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addClient = useCallback(
-    (input: ClientInput): Client => {
-      const id = input.company.toLowerCase().replace(/\s+/g, "-").slice(0, 24);
+    async (
+      input: ClientInput
+    ): Promise<{ ok: true; client: Client } | { ok: false; error: string }> => {
+      const base = input.company
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 24);
+      const id = base || `client-${Date.now()}`;
       const client: Client = {
         id,
         ...input,
         lastUpdatedAt: new Date().toISOString(),
       };
+
+      const { error } = await createClient().from("clients").upsert({
+        id: client.id,
+        name: client.name,
+        company: client.company,
+        email: client.email,
+        monthly_retainer: client.monthlyRetainer,
+        status: client.status,
+        project_status: client.projectStatus,
+        project_name: client.projectName,
+        last_updated_at: client.lastUpdatedAt,
+      });
+
+      if (error) return { ok: false, error: error.message };
+
       patch((s) => ({ ...s, clients: [...s.clients, client] }));
-      void createClient()
-        .from("clients")
-        .upsert({
-          id: client.id,
-          name: client.name,
-          company: client.company,
-          email: client.email,
-          monthly_retainer: client.monthlyRetainer,
-          status: client.status,
-          project_status: client.projectStatus,
-          project_name: client.projectName,
-          last_updated_at: client.lastUpdatedAt,
-        });
-      return client;
+      return { ok: true, client };
     },
     [patch]
   );
 
   const updateClient = useCallback(
-    (id: string, input: Partial<ClientInput>) => {
+    async (
+      id: string,
+      input: Partial<ClientInput>
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
       const lastUpdatedAt = new Date().toISOString();
-      patch((s) => ({
-        ...s,
-        clients: s.clients.map((c) =>
-          c.id === id ? { ...c, ...input, lastUpdatedAt } : c
-        ),
-      }));
       const row: Record<string, unknown> = { last_updated_at: lastUpdatedAt };
       if (input.name !== undefined) row.name = input.name;
       if (input.company !== undefined) row.company = input.company;
@@ -422,13 +481,32 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       if (input.projectStatus !== undefined)
         row.project_status = input.projectStatus;
       if (input.projectName !== undefined) row.project_name = input.projectName;
-      void createClient().from("clients").update(row).eq("id", id);
+
+      const { error } = await createClient()
+        .from("clients")
+        .update(row)
+        .eq("id", id);
+
+      if (error) return { ok: false, error: error.message };
+
+      patch((s) => ({
+        ...s,
+        clients: s.clients.map((c) =>
+          c.id === id ? { ...c, ...input, lastUpdatedAt } : c
+        ),
+      }));
+      return { ok: true };
     },
     [patch]
   );
 
   const deleteClient = useCallback(
-    (id: string) => {
+    async (
+      id: string
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const { error } = await createClient().from("clients").delete().eq("id", id);
+      if (error) return { ok: false, error: error.message };
+
       patch((s) => ({
         ...s,
         clients: s.clients.filter((c) => c.id !== id),
@@ -444,64 +522,242 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         notifications: s.notifications.filter((i) => i.clientId !== id),
         activeClientId: s.activeClientId === id ? "" : s.activeClientId,
       }));
-      void createClient().from("clients").delete().eq("id", id);
+      return { ok: true };
     },
     [patch]
   );
 
   const addWorkItem = useCallback(
-    (clientId: string, input: WorkItemInput): WorkItem => {
+    async (
+      clientId: string,
+      input: WorkItemInput
+    ): Promise<{ ok: true; item: WorkItem } | { ok: false; error: string }> => {
+      if (!input.serviceId) {
+        return { ok: false, error: "Select a service for this task." };
+      }
+
+      const service = state.services.find((s) => s.id === input.serviceId);
+      if (!service) {
+        return { ok: false, error: "Invalid service." };
+      }
+
       const ts = new Date().toISOString();
+      const createdBy = input.createdBy ?? "vitespace";
       const item: WorkItem = {
-        id: uid("w"),
+        id: uid("task_"),
         clientId,
+        serviceId: input.serviceId,
+        serviceName: service.name,
+        parentId: input.parentId,
         title: input.title.trim(),
+        description: input.description?.trim() || undefined,
         status: input.status,
-        project: input.project,
-        description: input.description?.trim(),
-        dueDate: input.dueDate,
-        progress: input.progress,
-        completedAt: input.status === "completed" ? ts.split("T")[0] : undefined,
+        createdBy,
+        createdByUserId: input.createdByUserId,
+        createdByEmail: input.createdByEmail,
+        timelineStart: input.timelineStart || undefined,
+        timelineEnd: input.timelineEnd || undefined,
+        days: taskInclusiveDays(input.timelineStart, input.timelineEnd),
         createdAt: ts,
         updatedAt: ts,
       };
+
+      const { error } = await createClient()
+        .from("tasks")
+        .insert(workItemToTaskInsert(item, createdBy));
+
+      if (error) return { ok: false, error: error.message };
+
       patch((s) => ({ ...s, workItems: [item, ...s.workItems] }));
       touchClientUpdated(clientId);
-      return item;
+      return { ok: true, item };
     },
-    [patch, touchClientUpdated]
+    [patch, state.services, touchClientUpdated]
   );
 
   const updateWorkItem = useCallback(
-    (id: string, input: Partial<WorkItemInput>) => {
+    async (
+      id: string,
+      input: Partial<WorkItemInput>
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const existing = state.workItems.find((i) => i.id === id);
+      if (!existing) return { ok: false, error: "Task not found." };
+
+      let serviceName = existing.serviceName;
+      const serviceId = input.serviceId ?? existing.serviceId;
+      if (input.serviceId) {
+        const service = state.services.find((s) => s.id === input.serviceId);
+        if (!service) {
+          return { ok: false, error: "Invalid service." };
+        }
+        serviceName = service.name;
+      }
+
+      const ts = new Date().toISOString();
+      const next: WorkItem = {
+        ...existing,
+        serviceId,
+        serviceName,
+        parentId:
+          input.parentId !== undefined ? input.parentId : existing.parentId,
+        title: input.title?.trim() ?? existing.title,
+        description:
+          input.description !== undefined
+            ? input.description.trim() || undefined
+            : existing.description,
+        status: input.status ?? existing.status,
+        createdBy: input.createdBy ?? existing.createdBy,
+        createdByUserId:
+          input.createdByUserId !== undefined
+            ? input.createdByUserId
+            : existing.createdByUserId,
+        createdByEmail:
+          input.createdByEmail !== undefined
+            ? input.createdByEmail
+            : existing.createdByEmail,
+        timelineStart:
+          input.timelineStart !== undefined
+            ? input.timelineStart || undefined
+            : existing.timelineStart,
+        timelineEnd:
+          input.timelineEnd !== undefined
+            ? input.timelineEnd || undefined
+            : existing.timelineEnd,
+        updatedAt: ts,
+      };
+      next.days = taskInclusiveDays(next.timelineStart, next.timelineEnd);
+
+      const row: Record<string, unknown> = {
+        updated_at: ts,
+        service_id: next.serviceId,
+        parent_id: next.parentId ?? null,
+        title: next.title,
+        description: next.description ?? null,
+        status: next.status,
+        created_by: next.createdBy,
+        created_by_user_id: next.createdByUserId ?? null,
+        created_by_email: next.createdByEmail ?? null,
+        timeline_start: next.timelineStart || null,
+        timeline_end: next.timelineEnd || null,
+      };
+
+      const { error } = await createClient()
+        .from("tasks")
+        .update(row)
+        .eq("id", id);
+
+      if (error) return { ok: false, error: error.message };
+
       patch((s) => ({
         ...s,
-        workItems: s.workItems.map((item) => {
-          if (item.id !== id) return item;
-          const ts = new Date().toISOString();
-          const status = input.status ?? item.status;
-          return {
-            ...item,
-            ...input,
-            title: input.title?.trim() ?? item.title,
-            description: input.description?.trim() ?? item.description,
-            updatedAt: ts,
-            completedAt:
-              status === "completed"
-                ? item.completedAt ?? ts.split("T")[0]
-                : undefined,
-          };
-        }),
+        workItems: s.workItems.map((item) => (item.id === id ? next : item)),
       }));
+      return { ok: true };
+    },
+    [patch, state.workItems, state.services]
+  );
+
+  const deleteWorkItem = useCallback(
+    async (
+      id: string
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const { error } = await createClient().from("tasks").delete().eq("id", id);
+      if (error) return { ok: false, error: error.message };
+      patch((s) => ({ ...s, workItems: s.workItems.filter((i) => i.id !== id) }));
+      return { ok: true };
     },
     [patch]
   );
 
-  const deleteWorkItem = useCallback(
-    (id: string) => {
-      patch((s) => ({ ...s, workItems: s.workItems.filter((i) => i.id !== id) }));
+  const addService = useCallback(
+    async (
+      input: ServiceInput
+    ): Promise<{ ok: true; service: Service } | { ok: false; error: string }> => {
+      const name = input.name.trim();
+      if (!name) return { ok: false, error: "Service name is required." };
+
+      const service: Service = {
+        id: uid("svc_"),
+        name,
+        createdAt: new Date().toISOString(),
+      };
+
+      const { error } = await createClient().from("services").insert({
+        id: service.id,
+        name: service.name,
+        created_at: service.createdAt,
+      });
+
+      if (error) return { ok: false, error: error.message };
+
+      patch((s) => ({ ...s, services: [...s.services, service] }));
+      return { ok: true, service };
     },
     [patch]
+  );
+
+  const updateService = useCallback(
+    async (
+      id: string,
+      input: Partial<ServiceInput>
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const name = input.name?.trim();
+      if (name !== undefined && !name) {
+        return { ok: false, error: "Service name is required." };
+      }
+
+      const row: Record<string, unknown> = {};
+      if (name !== undefined) row.name = name;
+
+      if (Object.keys(row).length) {
+        const { error } = await createClient()
+          .from("services")
+          .update(row)
+          .eq("id", id);
+        if (error) return { ok: false, error: error.message };
+      }
+
+      patch((s) => ({
+        ...s,
+        services: s.services.map((svc) =>
+          svc.id === id ? { ...svc, ...(name !== undefined ? { name } : {}) } : svc
+        ),
+        workItems: s.workItems.map((item) =>
+          item.serviceId === id && name !== undefined
+            ? { ...item, serviceName: name }
+            : item
+        ),
+      }));
+      return { ok: true };
+    },
+    [patch]
+  );
+
+  const deleteService = useCallback(
+    async (
+      id: string
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const inUse = state.workItems.some((w) => w.serviceId === id);
+      if (inUse) {
+        return {
+          ok: false,
+          error: "Cannot delete a service that still has tasks. Reassign or delete those tasks first.",
+        };
+      }
+
+      const { error } = await createClient()
+        .from("services")
+        .delete()
+        .eq("id", id);
+      if (error) return { ok: false, error: error.message };
+
+      patch((s) => ({
+        ...s,
+        services: s.services.filter((svc) => svc.id !== id),
+      }));
+      return { ok: true };
+    },
+    [patch, state.workItems]
   );
 
   const getActionItemsForClient = useCallback(
@@ -701,8 +957,24 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
 
   const addInvoice = useCallback(
     (clientId: string, input: InvoiceInput): Invoice => {
-      const inv: Invoice = { id: uid("inv"), clientId, ...input };
-      patch((s) => ({ ...s, invoices: [inv, ...s.invoices] }));
+      const inv: Invoice = {
+        id: input.id ?? uid("inv"),
+        clientId,
+        number: input.number,
+        title: input.title,
+        amount: input.amount,
+        issuedAt: input.issuedAt,
+        dueAt: input.dueAt,
+        status: input.status,
+        paidAt: input.paidAt,
+        fileUrl: input.fileUrl,
+        fileName: input.fileName,
+        fileSize: input.fileSize,
+      };
+      patch((s) => {
+        const without = s.invoices.filter((i) => i.id !== inv.id);
+        return { ...s, invoices: [inv, ...without] };
+      });
       return inv;
     },
     [patch]
@@ -737,10 +1009,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     [patch]
   );
   const markInvoicePaid = useCallback(
-    (id: string, paidAt?: string) => {
+    (id: string, _paidAt?: string) => {
       updateInvoice(id, {
         status: "paid",
-        paidAt: paidAt ?? new Date().toISOString().split("T")[0],
       });
     },
     [updateInvoice]
@@ -755,11 +1026,12 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         name: input.name,
         category: input.category,
         size: input.size,
-        project: input.project,
         fileUrl: input.fileUrl,
         description: input.description,
         mimeType: input.mimeType,
+        uploadedBy: input.uploadedBy,
         uploadedByUserId: input.uploadedByUserId,
+        uploadedByEmail: input.uploadedByEmail,
         editedAt: input.editedAt,
       };
       patch((s) => ({ ...s, documents: [doc, ...s.documents] }));
@@ -1010,6 +1282,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       getClient,
       getClientStats,
       getWorkItemsForClient,
+      getServices,
       getActionItemsForClient,
       getProgressAreasForClient,
       getChangeRequestsForClient,
@@ -1027,6 +1300,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       addWorkItem,
       updateWorkItem,
       deleteWorkItem,
+      addService,
+      updateService,
+      deleteService,
       addActionItem,
       updateActionItem,
       deleteActionItem,
@@ -1072,6 +1348,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       getClient,
       getClientStats,
       getWorkItemsForClient,
+      getServices,
       getActionItemsForClient,
       getProgressAreasForClient,
       getChangeRequestsForClient,
@@ -1089,6 +1366,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       addWorkItem,
       updateWorkItem,
       deleteWorkItem,
+      addService,
+      updateService,
+      deleteService,
       addActionItem,
       updateActionItem,
       deleteActionItem,
@@ -1146,6 +1426,7 @@ export function useClientPortal() {
     client,
     workItems: portal.getWorkItemsForClient(clientId),
     workStats: portal.getClientStats(clientId),
+    services: portal.getServices(),
     actionItems: portal.getActionItemsForClient(clientId),
     progressAreas: portal.getProgressAreasForClient(clientId),
     changeRequests: portal.getChangeRequestsForClient(clientId),
@@ -1169,6 +1450,7 @@ export function useAdminClient(clientId: string) {
     client,
     stats: portal.getClientStats(clientId),
     workItems: portal.getWorkItemsForClient(clientId),
+    services: portal.getServices(),
     actionItems: portal.getActionItemsForClient(clientId),
     progressAreas: portal.getProgressAreasForClient(clientId),
     changeRequests: portal.getChangeRequestsForClient(clientId),

@@ -73,7 +73,7 @@ export function NotificationsManager({ clientId }: { clientId: string }) {
           <div className="grid gap-4 py-1">
             <div className="space-y-1.5"><Label>Title</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
             <div className="space-y-1.5"><Label>Message</Label><Textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} rows={2} /></div>
-            <div className="space-y-1.5"><Label>Link (href)</Label><Input value={form.href} onChange={(e) => setForm({ ...form, href: e.target.value })} placeholder="/approvals" /></div>
+            <div className="space-y-1.5"><Label>Link (href)</Label><Input value={form.href} onChange={(e) => setForm({ ...form, href: e.target.value })} placeholder="/progress" /></div>
             <label className="flex items-center gap-2 text-[13px]">
               <input type="checkbox" checked={form.read} onChange={(e) => setForm({ ...form, read: e.target.checked })} />
               Mark as read

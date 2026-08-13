@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Pencil, Trash2, Eye } from "lucide-react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { Plus, Pencil, Trash2, Eye, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,9 +34,12 @@ interface ClientSettingsManagerProps {
 }
 
 export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) {
-  const { client, updateClient, deleteClient } = useAdminClient(clientId);
+  const { client, updateClient, deleteClient, loadingData, refreshFromSupabase } =
+    useAdminClient(clientId);
   const { signInAsClient } = useClientAuth();
   const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
     company: "",
@@ -48,9 +50,29 @@ export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) 
     projectName: "",
   });
 
-  if (!client) return null;
+  useEffect(() => {
+    void refreshFromSupabase({ isAdmin: true });
+  }, [refreshFromSupabase]);
+
+  if (loadingData && !client) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-12 text-[13px] text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading profile…
+      </div>
+    );
+  }
+
+  if (!client) {
+    return (
+      <p className="py-8 text-[13px] text-muted-foreground">
+        Client not found in the database.
+      </p>
+    );
+  }
 
   function openEdit() {
+    setError(null);
     setForm({
       name: client!.name,
       company: client!.company,
@@ -63,8 +85,10 @@ export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) 
     setEditOpen(true);
   }
 
-  function handleSave() {
-    updateClient(clientId, {
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    const result = await updateClient(clientId, {
       name: form.name,
       company: form.company,
       email: form.email,
@@ -73,19 +97,29 @@ export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) 
       projectStatus: form.projectStatus,
       projectName: form.projectName,
     });
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
     setEditOpen(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!client) return;
     if (
-      confirm(
+      !confirm(
         `Delete ${client.company}? All associated data will be removed. This cannot be undone.`
       )
     ) {
-      deleteClient(clientId);
-      window.location.href = "/admin";
+      return;
     }
+    const result = await deleteClient(clientId);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    window.location.href = "/admin";
   }
 
   function previewAsClient() {
@@ -100,7 +134,7 @@ export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) 
           <div>
             <h3 className="text-[15px] font-semibold">Client Profile</h3>
             <p className="mt-1 text-[13px] text-muted-foreground">
-              Controls what the client sees in their portal header and overview.
+              Loaded from the clients table. Edits save back to the database.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -136,7 +170,7 @@ export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) 
           variant="outline"
           size="sm"
           className="rounded-full text-destructive hover:text-destructive"
-          onClick={handleDelete}
+          onClick={() => void handleDelete()}
         >
           <Trash2 className="mr-1.5 h-3.5 w-3.5" />
           Delete Client
@@ -183,10 +217,16 @@ export function ClientSettingsManager({ clientId }: ClientSettingsManagerProps) 
                 </Select>
               </div>
             </div>
+            {error && <p className="text-[13px] text-red-600">{error}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-full">Cancel</Button>
-            <Button onClick={handleSave} className="rounded-full">Save Changes</Button>
+            <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-full" disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSave()} className="rounded-full" disabled={saving}>
+              {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -226,6 +266,8 @@ function FieldInput({
 export function AddClientDialog() {
   const { addClient } = usePortal();
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
     company: "",
@@ -234,9 +276,11 @@ export function AddClientDialog() {
     projectName: "Website Operations",
   });
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!form.company.trim() || !form.name.trim()) return;
-    const client = addClient({
+    setSaving(true);
+    setError(null);
+    const result = await addClient({
       name: form.name,
       company: form.company,
       email: form.email,
@@ -245,9 +289,14 @@ export function AddClientDialog() {
       projectStatus: "on_track",
       projectName: form.projectName,
     });
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
     setOpen(false);
     setForm({ name: "", company: "", email: "", monthlyRetainer: "", projectName: "Website Operations" });
-    window.location.href = `/admin/clients/${client.id}/settings`;
+    window.location.href = `/admin/clients/${result.client.id}/settings`;
   }
 
   return (
@@ -267,14 +316,23 @@ export function AddClientDialog() {
             <FieldInput label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} type="email" />
             <FieldInput label="Monthly Retainer (INR)" value={form.monthlyRetainer} onChange={(v) => setForm({ ...form, monthlyRetainer: v })} type="number" />
             <FieldInput label="Project Name" value={form.projectName} onChange={(v) => setForm({ ...form, projectName: v })} />
+            {error && <p className="text-[13px] text-red-600">{error}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} className="rounded-full">Cancel</Button>
-            <Button onClick={handleAdd} disabled={!form.company.trim()} className="rounded-full">Create Client</Button>
+            <Button variant="outline" onClick={() => setOpen(false)} className="rounded-full" disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleAdd()}
+              disabled={!form.company.trim() || saving}
+              className="rounded-full"
+            >
+              {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              Create Client
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
   );
 }
-

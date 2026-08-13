@@ -131,7 +131,9 @@ export function DocumentsPage() {
         size: string;
         fileUrl?: string;
         mimeType?: string;
+        uploadedBy?: "client" | "vitespace";
         uploadedByUserId?: string;
+        uploadedByEmail?: string;
       };
     };
 
@@ -150,7 +152,9 @@ export function DocumentsPage() {
       size: local.size,
       fileUrl: local.fileUrl,
       mimeType: local.mimeType || file.type || undefined,
+      uploadedBy: local.uploadedBy,
       uploadedByUserId: local.uploadedByUserId,
+      uploadedByEmail: local.uploadedByEmail,
     });
 
     setUploadOpen(false);
@@ -313,6 +317,7 @@ export function DocumentsPage() {
                           {doc.editedAt
                             ? `Edited ${formatDateTime(doc.editedAt)}`
                             : formatDate(doc.uploadedAt)}
+                          {doc.uploadedByEmail ? ` · ${doc.uploadedByEmail}` : ""}
                         </p>
                       </div>
                     </div>

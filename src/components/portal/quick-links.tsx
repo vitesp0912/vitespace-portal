@@ -5,7 +5,6 @@ import {
   Receipt,
   FolderOpen,
   MessageSquare,
-  CheckCircle2,
 } from "lucide-react";
 import { quickLinks } from "@/lib/portal-nav";
 
@@ -15,7 +14,6 @@ const iconMap = {
   "/invoices": Receipt,
   "/documents": FolderOpen,
   "/messages": MessageSquare,
-  "/approvals": CheckCircle2,
 };
 
 export function QuickLinks() {
