@@ -71,9 +71,11 @@ export function LoginPage() {
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-12">
         <div className="w-full max-w-[400px]">
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand/10 ring-1 ring-brand/20">
-              <span className="text-lg font-bold text-brand">V</span>
-            </div>
+            <img
+              src="/logo.png"
+              alt="Vitespace"
+              className="mx-auto mb-4 h-12 w-12 rounded-xl object-contain"
+            />
             <h1 className="text-[24px] font-semibold tracking-tight">Sign in to your portal</h1>
             <p className="mt-2 text-[14px] text-muted-foreground">
               Access your project progress, documents, invoices, and messages.

@@ -55,9 +55,11 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
       <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
         <div className="flex h-[60px] items-center px-5">
           <Link href="/admin" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand/20 ring-1 ring-brand/30">
-              <span className="text-sm font-bold text-brand">V</span>
-            </div>
+            <img
+              src="/logo.png"
+              alt="Vitespace"
+              className="h-8 w-8 rounded-lg object-contain"
+            />
             <div>
               <span className="text-[14px] font-semibold tracking-tight text-white">Vitespace</span>
               <p className="text-[10px] font-medium uppercase tracking-widest text-white/40">Internal</p>

@@ -15,9 +15,11 @@ export function PortalNavDesktop() {
     <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
       <div className="flex h-[60px] items-center px-5">
         <Link href="/" className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 ring-1 ring-white/10">
-            <span className="text-sm font-bold text-white">V</span>
-          </div>
+          <img
+            src="/logo.png"
+            alt="Vitespace"
+            className="h-8 w-8 rounded-lg object-contain"
+          />
           <span className="text-[15px] font-semibold tracking-tight text-white">Vitespace</span>
         </Link>
       </div>
