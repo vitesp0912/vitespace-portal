@@ -157,10 +157,12 @@ create policy "documents_select_own"
 create policy "documents_update_own_as_client"
   on documents for update
   using (
-    client_id in (select client_id from client_users where user_id = auth.uid())
+    uploaded_by_user_id = auth.uid()
+    and client_id in (select client_id from client_users where user_id = auth.uid())
   )
   with check (
-    client_id in (select client_id from client_users where user_id = auth.uid())
+    uploaded_by_user_id = auth.uid()
+    and client_id in (select client_id from client_users where user_id = auth.uid())
   );
 
 -- Messages: read own thread; client can send as client

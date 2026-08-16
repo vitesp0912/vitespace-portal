@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { PortalPage } from "@/components/portal/portal-page";
 import { PortalSectionHeader } from "@/components/portal/portal-section-header";
+import { useClientAuth } from "@/lib/client-auth";
 import { useClientPortal } from "@/lib/portal-store";
 import { DOCUMENT_CATEGORY_LABELS } from "@/lib/constants";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -26,6 +27,7 @@ import type { Document, DocumentCategory } from "@/types";
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB
 
 export function DocumentsPage() {
+  const { session } = useClientAuth();
   const { clientId, client, documents, addDocument, updateDocument } = useClientPortal();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<DocumentCategory | "all">("all");
@@ -166,7 +168,12 @@ export function DocumentsPage() {
     setUploading(false);
   }
 
+  function canEditDocument(doc: Document) {
+    return Boolean(session?.userId && doc.uploadedByUserId === session.userId);
+  }
+
   function startEditNote(doc: Document) {
+    if (!canEditDocument(doc)) return;
     setEditingNoteId(doc.id);
     setEditNote(doc.description ?? "");
     setError(null);
@@ -295,21 +302,29 @@ export function DocumentsPage() {
                               </Button>
                             </div>
                           </div>
-                        ) : doc.description ? (
+                        ) : (
                           <div className="mt-1 flex items-start gap-2">
-                            <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted-foreground">
-                              {doc.description}
-                            </p>
-                            <button
-                              type="button"
-                              className="shrink-0 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/doc:opacity-100"
-                              onClick={() => startEditNote(doc)}
-                              aria-label="Edit note"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
+                            {doc.description ? (
+                              <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted-foreground">
+                                {doc.description}
+                              </p>
+                            ) : canEditDocument(doc) ? (
+                              <p className="min-w-0 flex-1 text-[13px] text-muted-foreground/70">
+                                No note yet
+                              </p>
+                            ) : null}
+                            {canEditDocument(doc) && (
+                              <button
+                                type="button"
+                                className="shrink-0 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/doc:opacity-100"
+                                onClick={() => startEditNote(doc)}
+                                aria-label="Edit note"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
-                        ) : null}
+                        )}
 
                         <p className="mt-1 text-[12px] text-muted-foreground">
                           {doc.size}

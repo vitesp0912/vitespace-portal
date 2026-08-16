@@ -1,8 +1,5 @@
--- Document title edits + client update policy
--- Run after 006_documents_meta.sql
-
-alter table documents
-  add column if not exists edited_at timestamptz;
+-- Clients may only edit documents they uploaded
+-- Run after 006_documents_meta.sql (needs uploaded_by_user_id)
 
 drop policy if exists "documents_update_own_as_client" on documents;
 

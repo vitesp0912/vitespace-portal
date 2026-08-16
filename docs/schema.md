@@ -12,6 +12,7 @@ Tables after the slim redesign. Run in order:
 8. `supabase/migrations/012_tasks_days_creator_email.sql` (days + created_by_email)
 9. `supabase/migrations/013_documents_uploader_email.sql` (uploaded_by_email)
 10. `supabase/migrations/014_tasks_pending_status.sql` (pending status)
+11. `supabase/migrations/015_documents_update_own_upload.sql` (client can only edit own uploads)
 
 Auth sessions: use built-in Supabase Auth — no custom sessions table.
 
@@ -103,6 +104,7 @@ Admin uploads to R2, then saves `file_url`. Client downloads via that link.
 | `created_at` | timestamptz | Yes | |
 
 Run `013_documents_uploader_email.sql` for `uploaded_by_email`.
+Run `015_documents_update_own_upload.sql` so clients can only update files they uploaded (admins still have full access).
 
 ### `messages`
 
