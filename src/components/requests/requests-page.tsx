@@ -89,7 +89,10 @@ function NewRequestDialog() {
     >
       <DialogTrigger
         render={
-          <Button className="rounded-full" disabled={services.length === 0} />
+          <Button
+            className="w-full rounded-full sm:w-auto"
+            disabled={services.length === 0}
+          />
         }
       >
         <Plus className="mr-1.5 h-4 w-4" />

@@ -33,7 +33,8 @@ export type DocumentCategory =
   | "seo_reports"
   | "property_data"
   | "creative_assets"
-  | "project_documents";
+  | "project_documents"
+  | "minutes_of_meeting";
 
 export type ConversationContext =
   | "project"
@@ -84,6 +85,12 @@ export interface WorkItem {
   timelineEnd?: string;
   /** Inclusive day count from start→end (same day = 1) */
   days?: number;
+  /** Public URL to the shipped output (live page, doc, module, etc.) */
+  deliverableUrl?: string;
+  /** CTA label, e.g. "View Page", "View Property" */
+  deliverableLabel?: string;
+  /** Bullet list shown in deliverable detail panel */
+  deliveredItems?: string[];
   createdAt: string;
   updatedAt: string;
 }

@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, Search } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Bell, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +23,7 @@ import { useClientPortal } from "@/lib/portal-store";
 import { useClientAuth } from "@/lib/client-auth";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ClientAvatar } from "@/components/shared/client-avatar";
 
 export function PortalHeader() {
   const router = useRouter();
@@ -42,19 +42,10 @@ export function PortalHeader() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <header className="sticky top-0 z-40 flex h-[60px] shrink-0 items-center justify-between gap-4 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
-      <div className="hidden min-w-0 sm:block">
+    <header className="sticky top-0 z-40 flex h-[56px] shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl sm:h-[60px] sm:gap-4 sm:px-6 lg:px-8">
+      <div className="min-w-0 flex-1 pr-2">
         <p className="truncate text-[13px] font-medium text-foreground">{client.company}</p>
         <p className="truncate text-[11px] text-muted-foreground">{client.projectName}</p>
-      </div>
-
-      <div className="relative mx-auto hidden max-w-sm flex-1 md:block">
-        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <input
-          type="search"
-          placeholder="Search documents, invoices..."
-          className="h-9 w-full rounded-lg border-0 bg-muted/60 pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground/70 transition-colors focus:bg-muted focus:outline-none focus:ring-2 focus:ring-brand/20"
-        />
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
@@ -71,7 +62,7 @@ export function PortalHeader() {
               </span>
             )}
           </SheetTrigger>
-          <SheetContent className="w-[360px] border-l border-border/60">
+          <SheetContent className="w-full max-w-full border-l border-border/60 sm:w-[360px] sm:max-w-[360px]">
             <SheetHeader>
               <div className="flex items-center justify-between">
                 <SheetTitle className="text-[16px] font-semibold">Notifications</SheetTitle>
@@ -106,11 +97,11 @@ export function PortalHeader() {
 
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="ghost" className="h-9 gap-2 rounded-lg px-2 hover:bg-muted/60" />}>
-            <Avatar className="h-7 w-7 ring-2 ring-border/50">
-              <AvatarFallback className="bg-brand/10 text-[11px] font-semibold text-brand">
-                {client.name.charAt(0)}
-              </AvatarFallback>
-            </Avatar>
+            <ClientAvatar
+              src={client.avatar}
+              name={client.company}
+              className="h-7 w-7 text-[11px]"
+            />
             <div className="hidden text-left sm:block">
               <p className="text-[13px] font-medium leading-none">{client.name}</p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">{client.company}</p>

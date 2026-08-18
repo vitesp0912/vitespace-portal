@@ -14,6 +14,7 @@ import { formatCurrency } from "@/lib/constants";
 import { usePortal } from "@/lib/portal-store";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ClientAvatar } from "@/components/shared/client-avatar";
 
 export function AdminDashboard() {
   const {
@@ -105,9 +106,12 @@ export function AdminDashboard() {
                       className="admin-lift group flex flex-col gap-4 rounded-2xl bg-card px-5 py-4 ring-1 ring-border/80 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-[15px] font-semibold text-brand">
-                          {client.company.charAt(0)}
-                        </div>
+                        <ClientAvatar
+                          src={client.avatar}
+                          name={client.company}
+                          rounded="xl"
+                          className="h-11 w-11 text-[15px]"
+                        />
                         <div>
                           <div className="flex flex-wrap items-center gap-2.5">
                             <p className="text-[15px] font-semibold text-foreground transition-colors group-hover:text-brand">
@@ -131,7 +135,7 @@ export function AdminDashboard() {
                             active
                           </span>
                           {stats.awaitingClient > 0 && (
-                            <span className="text-amber-400">
+                            <span className="text-amber-600">
                               <span className="font-medium">
                                 {stats.awaitingClient}
                               </span>{" "}

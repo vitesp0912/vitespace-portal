@@ -31,6 +31,40 @@ export function getGreeting(): string {
   return "Good evening";
 }
 
+export function formatChatTime(dateString: string): string {
+  try {
+    return format(parseISO(dateString), "h:mm a");
+  } catch {
+    return dateString;
+  }
+}
+
+export function formatChatDay(dateString: string): string {
+  try {
+    const date = parseISO(dateString);
+    const today = new Date();
+    if (format(date, "yyyy-MM-dd") === format(today, "yyyy-MM-dd")) {
+      return "Today";
+    }
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    if (format(date, "yyyy-MM-dd") === format(yesterday, "yyyy-MM-dd")) {
+      return "Yesterday";
+    }
+    return format(date, "d MMMM yyyy");
+  } catch {
+    return dateString;
+  }
+}
+
+export function chatDayKey(dateString: string): string {
+  try {
+    return format(parseISO(dateString), "yyyy-MM-dd");
+  } catch {
+    return dateString;
+  }
+}
+
 export function formatLongDate(date: Date = new Date()): string {
   return format(date, "EEEE, d MMMM");
 }

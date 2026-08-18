@@ -17,6 +17,12 @@ export const metadata: Metadata = {
     "Everything your agency is doing for you, in one place. Progress, communication, approvals, and billing.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html

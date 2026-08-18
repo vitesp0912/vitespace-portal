@@ -19,7 +19,7 @@ export function ActionRequiredPanel() {
             {actionItems.length}
           </span>
         </div>
-        <Link href="/progress?tab=awaiting_client" className="group flex items-center gap-1 text-[12px] font-medium text-amber-800 transition-colors hover:text-amber-950">
+        <Link href="/progress?tab=awaiting_client" className="group flex shrink-0 items-center gap-1 text-[12px] font-medium text-amber-800 transition-colors hover:text-amber-950">
           View all actions
           <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
         </Link>
@@ -38,7 +38,7 @@ export function ActionRequiredPanel() {
                   Requested {formatShortRelative(item.requestedAt)}
                 </p>
               </div>
-              <ArrowRight className="h-4 w-4 shrink-0 text-amber-600 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
+              <ArrowRight className="h-4 w-4 shrink-0 text-amber-600 opacity-70 sm:opacity-0 sm:transition-all sm:group-hover:translate-x-0.5 sm:group-hover:opacity-100" />
             </Link>
           </li>
         ))}

@@ -16,12 +16,12 @@ export function PortalSectionHeader({
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between",
+        "flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between",
         className
       )}
     >
       <div>
-        <h1 className="text-[26px] font-semibold tracking-tight sm:text-[28px]">
+        <h1 className="text-[22px] font-semibold tracking-tight sm:text-[28px]">
           {title}
         </h1>
         {description && (
@@ -30,7 +30,7 @@ export function PortalSectionHeader({
           </p>
         )}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="w-full shrink-0 lg:w-auto">{action}</div>}
     </div>
   );
 }

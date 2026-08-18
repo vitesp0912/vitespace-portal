@@ -62,11 +62,11 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           action={<StatusBadge status={client.projectStatus} />}
         />
         <div className="admin-gradient-accent overflow-hidden rounded-2xl ring-1 ring-brand/20">
-          <div className="grid grid-cols-2 divide-x divide-white/[0.06] sm:grid-cols-5">
+          <div className="grid grid-cols-2 divide-x divide-border/80 sm:grid-cols-5">
             {metrics.map((m) => (
               <div key={m.label} className="px-5 py-4">
                 <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">{m.label}</p>
-                <p className={cn("mt-1.5 text-[22px] font-semibold tabular-nums tracking-tight", m.highlight && Number(m.value) > 0 ? "text-amber-400" : "text-foreground")}>
+                <p className={cn("mt-1.5 text-[22px] font-semibold tabular-nums tracking-tight", m.highlight && Number(m.value) > 0 ? "text-amber-600" : "text-foreground")}>
                   {m.value}
                 </p>
               </div>

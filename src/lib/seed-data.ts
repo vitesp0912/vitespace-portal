@@ -143,6 +143,7 @@ export const DOCUMENT_CATEGORIES = [
   { value: "property_data", label: "Property Data" },
   { value: "creative_assets", label: "Creative Assets" },
   { value: "project_documents", label: "Project Documents" },
+  { value: "minutes_of_meeting", label: "Minutes of Meeting" },
 ] as const;
 
 export function formatCurrency(amount: number): string {

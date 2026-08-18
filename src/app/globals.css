@@ -117,34 +117,14 @@
 }
 
 .admin-theme {
-  --background: #080910;
-  --foreground: #f0f1f5;
-  --surface: #0f111a;
-  --surface-elevated: #141722;
-  --card: #0f111a;
-  --card-foreground: #f0f1f5;
-  --popover: #141722;
-  --popover-foreground: #f0f1f5;
-  --brand: #7c76ff;
-  --brand-muted: rgba(124, 118, 255, 0.12);
-  --primary: #7c76ff;
-  --primary-foreground: #ffffff;
-  --secondary: #141722;
-  --secondary-foreground: #f0f1f5;
-  --muted: #141722;
-  --muted-foreground: #8b93a7;
-  --accent: #1a1d2e;
-  --accent-foreground: #f0f1f5;
-  --destructive: #ef4444;
-  --border: rgba(255, 255, 255, 0.07);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: rgba(124, 118, 255, 0.4);
-  --radius: 0.625rem;
-  --sidebar: #06070d;
-  --sidebar-foreground: rgba(255, 255, 255, 0.62);
-  --sidebar-accent: rgba(255, 255, 255, 0.06);
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #5c6478;
+  --sidebar-primary: #0c0e1a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef0f6;
+  --sidebar-accent-foreground: #0c0e1a;
+  --sidebar-border: rgba(12, 14, 26, 0.08);
+  --sidebar-ring: rgba(76, 70, 232, 0.35);
   color: var(--foreground);
   background-color: var(--background);
 }
@@ -156,6 +136,7 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "ss01", "cv01";
+    overflow-x: hidden;
   }
   html {
     @apply font-sans;
@@ -198,13 +179,17 @@
     @apply transition-all duration-200 ease-out;
   }
 
-  .portal-lift:hover {
-    transform: translateY(-1px);
+  @media (hover: hover) {
+    .portal-lift:hover {
+      transform: translateY(-1px);
+    }
   }
 
   .admin-surface {
     @apply rounded-2xl bg-card ring-1 ring-border/80;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow:
+      0 1px 2px rgba(12, 14, 26, 0.04),
+      0 4px 16px rgba(12, 14, 26, 0.04);
   }
 
   .admin-lift {
@@ -213,14 +198,16 @@
 
   .admin-lift:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    box-shadow:
+      0 2px 4px rgba(12, 14, 26, 0.05),
+      0 8px 24px rgba(12, 14, 26, 0.07);
   }
 
   .admin-gradient-accent {
     background: linear-gradient(
       135deg,
-      rgba(124, 118, 255, 0.15) 0%,
-      rgba(99, 102, 241, 0.08) 100%
+      rgba(76, 70, 232, 0.08) 0%,
+      rgba(99, 102, 241, 0.04) 100%
     );
   }
 }
@@ -252,4 +239,13 @@
 
 .animate-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
+}
+
+.chat-canvas {
+  background-color: #eceef4;
+  background-image: radial-gradient(
+    rgba(12, 14, 26, 0.045) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
 }

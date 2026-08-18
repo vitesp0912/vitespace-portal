@@ -88,6 +88,7 @@ export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
   property_data: "Property Data",
   creative_assets: "Creative Assets",
   project_documents: "Project Documents",
+  minutes_of_meeting: "Minutes of Meeting",
 };
 
 export const DOCUMENT_CATEGORIES = Object.entries(DOCUMENT_CATEGORY_LABELS).map(

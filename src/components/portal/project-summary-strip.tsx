@@ -10,7 +10,7 @@ interface SummaryStat {
 
 export function ProjectSummaryStrip({ stats }: { stats: SummaryStat[] }) {
   return (
-    <div className="vitespace-gradient relative overflow-hidden rounded-2xl px-6 py-6 text-white portal-shadow sm:px-8 sm:py-7">
+    <div className="vitespace-gradient relative overflow-hidden rounded-2xl px-4 py-5 text-white portal-shadow sm:px-8 sm:py-7">
       <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-12 left-1/3 h-32 w-32 rounded-full bg-indigo-300/20 blur-2xl" />
 
@@ -32,7 +32,7 @@ export function ProjectSummaryStrip({ stats }: { stats: SummaryStat[] }) {
                   {stat.sublabel}
                 </span>
               </div>
-              <p className="text-[36px] font-semibold leading-none tracking-tight tabular-nums sm:text-[40px]">
+              <p className="text-[28px] font-semibold leading-none tracking-tight tabular-nums sm:text-[40px]">
                 {stat.value}
               </p>
               <p className="mt-1.5 text-[13px] font-medium text-white/75">

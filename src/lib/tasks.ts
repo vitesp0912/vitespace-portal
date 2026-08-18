@@ -35,6 +35,9 @@ export function taskToWorkItem(
     timelineStart: task.timelineStart,
     timelineEnd: task.timelineEnd,
     days,
+    deliverableUrl: task.deliverableUrl,
+    deliverableLabel: task.deliverableLabel,
+    deliveredItems: task.deliveredItems,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   };
@@ -57,6 +60,9 @@ export function workItemToTaskInsert(
     created_by_email: item.createdByEmail ?? null,
     timeline_start: item.timelineStart || null,
     timeline_end: item.timelineEnd || null,
+    deliverable_url: item.deliverableUrl ?? null,
+    deliverable_label: item.deliverableLabel ?? null,
+    delivered_items: item.deliveredItems?.length ? item.deliveredItems : [],
     created_at: item.createdAt,
     updated_at: item.updatedAt,
   };

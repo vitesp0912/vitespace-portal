@@ -12,8 +12,8 @@ interface AdminMetricProps {
 const accents = {
   default: "text-foreground",
   brand: "text-brand",
-  amber: "text-amber-400",
-  emerald: "text-emerald-400",
+  amber: "text-amber-600",
+  emerald: "text-emerald-600",
 };
 
 export function AdminMetric({

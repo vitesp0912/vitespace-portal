@@ -19,7 +19,7 @@ export function OverviewPage() {
   if (!client) return null;
 
   const summaryStats = buildSummaryStats({
-    completedThisMonth: workStats.completedThisMonth || workStats.completed,
+    completedThisMonth: workStats.completedThisMonth,
     inProgress: workStats.inProgress,
     awaitingClient: workStats.awaitingClient,
     upcoming: workStats.upcoming,
@@ -29,7 +29,7 @@ export function OverviewPage() {
     <PortalPage className="space-y-8 sm:space-y-10">
       <header className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-xl">
-          <h1 className="text-[28px] font-semibold tracking-tight text-foreground sm:text-[32px]">
+          <h1 className="text-[22px] font-semibold tracking-tight text-foreground sm:text-[28px] lg:text-[32px]">
             {getGreeting()}, {client.name} 👋
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">

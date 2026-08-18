@@ -1,8 +1,19 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Search, FileText, Upload, Loader2, Eye, X, Pencil, Check, Download } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import {
+  FileText,
+  Upload,
+  Loader2,
+  Eye,
+  X,
+  Pencil,
+  Check,
+  Download,
+  FolderOpen,
+  Image as ImageIcon,
+  Film,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,29 +24,39 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PortalPage } from "@/components/portal/portal-page";
 import { PortalSectionHeader } from "@/components/portal/portal-section-header";
 import { useClientAuth } from "@/lib/client-auth";
 import { useClientPortal } from "@/lib/portal-store";
-import { DOCUMENT_CATEGORY_LABELS } from "@/lib/constants";
+import { DOCUMENT_CATEGORIES, DOCUMENT_CATEGORY_LABELS } from "@/lib/constants";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { getDocumentMediaKind } from "@/lib/document-media";
 import { uploadFormDataWithProgress } from "@/lib/upload-progress";
 import { cn } from "@/lib/utils";
+import { FitLabel, FILTER_SELECT_TRIGGER } from "@/components/ui/fit-label";
 import type { Document, DocumentCategory } from "@/types";
 
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB
 
 export function DocumentsPage() {
   const { session } = useClientAuth();
-  const { clientId, client, documents, addDocument, updateDocument } = useClientPortal();
-  const [search, setSearch] = useState("");
+  const { clientId, client, documents, addDocument, updateDocument } =
+    useClientPortal();
   const [category, setCategory] = useState<DocumentCategory | "all">("all");
   const [uploading, setUploading] = useState(false);
   const [uploadPercent, setUploadPercent] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [description, setDescription] = useState("");
+  const [uploadCategory, setUploadCategory] =
+    useState<DocumentCategory>("project_documents");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [viewer, setViewer] = useState<Document | null>(null);
@@ -44,15 +65,9 @@ export function DocumentsPage() {
   const [savingNote, setSavingNote] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const filtered = documents.filter((doc) => {
-    const matchSearch =
-      doc.name.toLowerCase().includes(search.toLowerCase()) ||
-      (doc.description ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchCat = category === "all" || doc.category === category;
-    return matchSearch && matchCat;
-  });
-
-  const categories = Object.keys(DOCUMENT_CATEGORY_LABELS) as DocumentCategory[];
+  const filtered = documents.filter(
+    (doc) => category === "all" || doc.category === category
+  );
 
   function openUploadDialog() {
     setError(null);
@@ -61,6 +76,7 @@ export function DocumentsPage() {
       return;
     }
     setDescription("");
+    setUploadCategory("project_documents");
     setFile(null);
     setUploadPercent(0);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -105,11 +121,10 @@ export function DocumentsPage() {
     const body = new FormData();
     body.set("kind", "documents");
     body.set("file", file);
-    // Asset title stays the original filename — not editable
     body.set("name", file.name);
     body.set("description", description.trim());
     body.set("uploadedBy", "client");
-    body.set("category", "project_documents");
+    body.set("category", uploadCategory);
     if (client?.company) body.set("company", client.company);
 
     const result = await uploadFormDataWithProgress(
@@ -150,7 +165,7 @@ export function DocumentsPage() {
       id: local.id,
       name: local.name || file.name,
       description: local.description || description.trim() || undefined,
-      category: (local.category as DocumentCategory) || "project_documents",
+      category: (local.category as DocumentCategory) || uploadCategory,
       size: local.size,
       fileUrl: local.fileUrl,
       mimeType: local.mimeType || file.type || undefined,
@@ -195,17 +210,45 @@ export function DocumentsPage() {
   }
 
   const pickKind = file ? getDocumentMediaKind(file.type, file.name) : "other";
+  const categoryLabel =
+    category === "all" ? "All types" : DOCUMENT_CATEGORY_LABELS[category];
 
   return (
-    <PortalPage className="space-y-8">
+    <PortalPage className="space-y-6 sm:space-y-8">
       <PortalSectionHeader
         title="Documents"
         description="Upload files with an optional note. The file name stays as the title."
+        className="lg:items-center"
         action={
-          <Button type="button" className="rounded-full" onClick={openUploadDialog}>
-            <Upload className="mr-1.5 h-4 w-4" />
-            Upload file
-          </Button>
+          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center sm:justify-end sm:gap-2">
+            <Select
+              value={category}
+              onValueChange={(v) => v && setCategory(v as DocumentCategory | "all")}
+            >
+              <SelectTrigger className={FILTER_SELECT_TRIGGER}>
+                <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+                <SelectValue>
+                  <FitLabel>{categoryLabel}</FitLabel>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end" alignItemWithTrigger={false}>
+                <SelectItem value="all">All types</SelectItem>
+                {DOCUMENT_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              className="h-11 w-full rounded-xl px-4 text-sm sm:w-44"
+              onClick={openUploadDialog}
+            >
+              <Upload className="mr-1.5 h-4 w-4" />
+              Upload file
+            </Button>
+          </div>
         }
       />
 
@@ -215,159 +258,159 @@ export function DocumentsPage() {
         </div>
       )}
 
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search documents..."
-          className="rounded-full border-0 bg-muted/60 pl-9"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <FilterChip active={category === "all"} onClick={() => setCategory("all")} label="All" />
-        {categories.map((cat) => (
-          <FilterChip
-            key={cat}
-            active={category === cat}
-            onClick={() => setCategory(cat)}
-            label={DOCUMENT_CATEGORY_LABELS[cat]}
-          />
-        ))}
-      </div>
-
-      <ul className="divide-y divide-border/60 rounded-2xl bg-surface ring-1 ring-border/50">
+      <ul className="space-y-3">
         {filtered.length === 0 ? (
-          <li className="flex flex-col items-center gap-3 px-5 py-12 text-center">
-            <p className="text-[13px] text-muted-foreground">No documents yet.</p>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={openUploadDialog}
-            >
-              <Upload className="mr-1.5 h-4 w-4" />
-              Upload file
-            </Button>
+          <li className="flex flex-col items-center gap-3 rounded-2xl bg-surface px-5 py-12 text-center ring-1 ring-border/50">
+            <p className="text-[13px] text-muted-foreground">
+              {documents.length === 0
+                ? "No documents yet."
+                : "No documents match this filter."}
+            </p>
+            {documents.length === 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl"
+                onClick={openUploadDialog}
+              >
+                <Upload className="mr-1.5 h-4 w-4" />
+                Upload file
+              </Button>
+            )}
           </li>
         ) : (
           filtered.map((doc) => {
             const kind = getDocumentMediaKind(doc.mimeType, doc.name);
-            const showView = Boolean(doc.fileUrl) && (kind === "image" || kind === "video");
+            const showView =
+              Boolean(doc.fileUrl) && (kind === "image" || kind === "video");
             const isEditingNote = editingNoteId === doc.id;
+            const ThumbIcon =
+              kind === "image" ? ImageIcon : kind === "video" ? Film : FileText;
 
             return (
-              <li key={doc.id} className="group/doc px-5 py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
-                        <FileText className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] font-medium">{doc.name}</p>
-
-                        {isEditingNote ? (
-                          <div className="mt-2 space-y-2">
-                            <Textarea
-                              value={editNote}
-                              onChange={(e) => setEditNote(e.target.value)}
-                              rows={3}
-                              className="min-h-0 resize-none text-[13px]"
-                              placeholder="Add a note about this file…"
-                              autoFocus
-                            />
-                            <div className="flex gap-1.5">
-                              <Button
-                                type="button"
-                                size="icon-sm"
-                                variant="ghost"
-                                className="rounded-full"
-                                onClick={() => setEditingNoteId(null)}
-                                disabled={savingNote}
-                                aria-label="Cancel"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                type="button"
-                                size="icon-sm"
-                                className="rounded-full"
-                                onClick={() => void saveNote()}
-                                disabled={savingNote}
-                                aria-label="Save note"
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="mt-1 flex items-start gap-2">
-                            {doc.description ? (
-                              <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted-foreground">
-                                {doc.description}
-                              </p>
-                            ) : canEditDocument(doc) ? (
-                              <p className="min-w-0 flex-1 text-[13px] text-muted-foreground/70">
-                                No note yet
-                              </p>
-                            ) : null}
-                            {canEditDocument(doc) && (
-                              <button
-                                type="button"
-                                className="shrink-0 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/doc:opacity-100"
-                                onClick={() => startEditNote(doc)}
-                                aria-label="Edit note"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        )}
-
-                        <p className="mt-1 text-[12px] text-muted-foreground">
-                          {doc.size}
-                          {" · "}
-                          {doc.editedAt
-                            ? `Edited ${formatDateTime(doc.editedAt)}`
-                            : formatDate(doc.uploadedAt)}
-                          {doc.uploadedByEmail ? ` · ${doc.uploadedByEmail}` : ""}
-                        </p>
-                      </div>
-                    </div>
-
-                    {doc.fileUrl && kind === "image" && (
+              <li
+                key={doc.id}
+                className="group/doc overflow-hidden rounded-2xl bg-surface p-4 ring-1 ring-border/50 sm:p-5"
+              >
+                <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    {kind === "image" && doc.fileUrl ? (
                       <button
                         type="button"
-                        className="mt-3 block overflow-hidden rounded-xl ring-1 ring-border/60"
+                        className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-muted/60 ring-1 ring-border/60"
                         onClick={() => setViewer(doc)}
+                        aria-label={`Preview ${doc.name}`}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={doc.fileUrl}
-                          alt={doc.name}
-                          className="max-h-56 w-full max-w-md object-cover"
+                          alt=""
+                          className="h-full w-full object-cover"
                         />
                       </button>
+                    ) : (
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground">
+                        <ThumbIcon className="h-4 w-4" />
+                      </div>
                     )}
 
-                    {doc.fileUrl && kind === "video" && (
-                      <video
-                        src={doc.fileUrl}
-                        controls
-                        className="mt-3 max-h-56 w-full max-w-md rounded-xl ring-1 ring-border/60"
-                      />
-                    )}
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="break-all text-[14px] font-medium leading-snug sm:truncate"
+                        title={doc.name}
+                      >
+                        {doc.name}
+                      </p>
+                      <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        {DOCUMENT_CATEGORY_LABELS[doc.category] ?? doc.category}
+                      </p>
+
+                      {isEditingNote ? (
+                        <div className="mt-2 space-y-2">
+                          <Textarea
+                            value={editNote}
+                            onChange={(e) => setEditNote(e.target.value)}
+                            rows={3}
+                            className="min-h-0 resize-none text-[13px]"
+                            placeholder="Add a note about this file…"
+                            autoFocus
+                          />
+                          <div className="flex gap-1.5">
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              className="rounded-full"
+                              onClick={() => setEditingNoteId(null)}
+                              disabled={savingNote}
+                              aria-label="Cancel"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              className="rounded-full"
+                              onClick={() => void saveNote()}
+                              disabled={savingNote}
+                              aria-label="Save note"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-1.5 flex items-start gap-2">
+                          {doc.description ? (
+                            <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted-foreground">
+                              {doc.description}
+                            </p>
+                          ) : canEditDocument(doc) ? (
+                            <p className="min-w-0 flex-1 text-[13px] text-muted-foreground/70">
+                              No note yet
+                            </p>
+                          ) : null}
+                          {canEditDocument(doc) && (
+                            <button
+                              type="button"
+                              className="shrink-0 rounded-full p-1.5 text-muted-foreground transition-opacity hover:text-foreground md:opacity-0 md:group-hover/doc:opacity-100"
+                              onClick={() => startEditNote(doc)}
+                              aria-label="Edit note"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      <p className="mt-1.5 text-[12px] text-muted-foreground">
+                        {doc.size}
+                        {" · "}
+                        {doc.editedAt
+                          ? `Edited ${formatDateTime(doc.editedAt)}`
+                          : formatDate(doc.uploadedAt)}
+                        {doc.uploadedByEmail ? (
+                          <span className="hidden sm:inline">
+                            {" · "}
+                            {doc.uploadedByEmail}
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                  <div
+                    className={cn(
+                      "grid shrink-0 gap-2 sm:flex sm:items-center",
+                      showView ? "grid-cols-2" : "grid-cols-1"
+                    )}
+                  >
                     {doc.fileUrl && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="rounded-full"
+                        className="h-9 w-full rounded-xl sm:w-auto"
                         onClick={() =>
                           window.open(doc.fileUrl, "_blank", "noopener,noreferrer")
                         }
@@ -381,7 +424,7 @@ export function DocumentsPage() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="rounded-full"
+                        className="h-9 w-full rounded-xl sm:w-auto"
                         onClick={() => setViewer(doc)}
                       >
                         <Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -408,7 +451,7 @@ export function DocumentsPage() {
             <DialogTitle>Upload file</DialogTitle>
           </DialogHeader>
           <div className="grid min-w-0 max-w-full gap-4 overflow-x-hidden py-1">
-            <div className="min-w-0 max-w-full space-y-1.5 overflow-hidden">
+            <div className="min-w-0 max-w-full space-y-1.5">
               <Label>File</Label>
               <input
                 ref={fileInputRef}
@@ -417,22 +460,22 @@ export function DocumentsPage() {
                 className="sr-only"
                 onChange={onPickFile}
               />
-              <Button
+              <button
                 type="button"
-                variant="outline"
-                className="rounded-full"
                 disabled={uploading}
                 onClick={() => fileInputRef.current?.click()}
+                className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-muted/40 px-4 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-50"
               >
-                Choose file
-              </Button>
-              <p
-                className="max-w-full overflow-hidden break-all text-[13px] text-muted-foreground"
-                title={file?.name}
-              >
-                {file ? file.name : "No file chosen"}
+                <span className="min-w-0 truncate text-[13px] text-muted-foreground">
+                  {file ? file.name : "Choose a file"}
+                </span>
+                <span className="shrink-0 text-[12px] font-medium text-foreground">
+                  Browse
+                </span>
+              </button>
+              <p className="text-[11px] text-muted-foreground">
+                Any file type · max 15 MB
               </p>
-              <p className="text-[11px] text-muted-foreground">Any file type · max 15 MB</p>
             </div>
 
             {previewUrl && pickKind === "image" && (
@@ -440,18 +483,42 @@ export function DocumentsPage() {
               <img
                 src={previewUrl}
                 alt="Preview"
-                className="max-h-48 w-full max-w-full rounded-xl object-cover ring-1 ring-border/60"
+                className="max-h-40 w-full max-w-full rounded-xl object-cover ring-1 ring-border/60"
               />
             )}
             {previewUrl && pickKind === "video" && (
               <video
                 src={previewUrl}
                 controls
-                className="max-h-48 w-full max-w-full rounded-xl ring-1 ring-border/60"
+                className="max-h-40 w-full max-w-full rounded-xl ring-1 ring-border/60"
               />
             )}
 
-            <div className="min-w-0 max-w-full space-y-1.5 overflow-hidden">
+            <div className="min-w-0 space-y-1.5">
+              <Label>Type</Label>
+              <Select
+                value={uploadCategory}
+                onValueChange={(v) =>
+                  v && setUploadCategory(v as DocumentCategory)
+                }
+                disabled={uploading}
+              >
+                <SelectTrigger className="h-11 w-full rounded-xl">
+                  <SelectValue>
+                    {DOCUMENT_CATEGORY_LABELS[uploadCategory]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-0 max-w-full space-y-1.5">
               <Label htmlFor="doc-text">Note (optional)</Label>
               <Textarea
                 id="doc-text"
@@ -488,7 +555,7 @@ export function DocumentsPage() {
             <Button
               type="button"
               variant="outline"
-              className="rounded-full"
+              className="w-full rounded-xl sm:w-auto"
               onClick={() => setUploadOpen(false)}
               disabled={uploading}
             >
@@ -496,7 +563,7 @@ export function DocumentsPage() {
             </Button>
             <Button
               type="button"
-              className="rounded-full"
+              className="w-full rounded-xl sm:w-auto"
               onClick={() => void handleUpload()}
               disabled={uploading || !file}
             >
@@ -508,9 +575,9 @@ export function DocumentsPage() {
       </Dialog>
 
       <Dialog open={Boolean(viewer)} onOpenChange={(open) => !open && setViewer(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[min(90dvh,900px)] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="pr-8">{viewer?.name}</DialogTitle>
+            <DialogTitle className="pr-8 break-all">{viewer?.name}</DialogTitle>
           </DialogHeader>
           {viewer?.fileUrl &&
             getDocumentMediaKind(viewer.mimeType, viewer.name) === "image" && (
@@ -533,7 +600,7 @@ export function DocumentsPage() {
           <Button
             type="button"
             variant="outline"
-            className="rounded-full"
+            className="w-full rounded-xl sm:w-auto"
             onClick={() => setViewer(null)}
           >
             <X className="mr-1.5 h-4 w-4" />
@@ -542,30 +609,5 @@ export function DocumentsPage() {
         </DialogContent>
       </Dialog>
     </PortalPage>
-  );
-}
-
-function FilterChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-all",
-        active
-          ? "bg-foreground text-background"
-          : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
-      )}
-    >
-      {label}
-    </button>
   );
 }

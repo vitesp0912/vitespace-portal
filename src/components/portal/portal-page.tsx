@@ -10,7 +10,7 @@ export function PortalPage({
   return (
     <div
       className={cn(
-        "mx-auto w-full max-w-[1120px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 animate-fade-up",
+        "mx-auto w-full max-w-[1120px] px-4 py-5 sm:px-6 sm:py-8 lg:px-8 animate-fade-up",
         className
       )}
     >

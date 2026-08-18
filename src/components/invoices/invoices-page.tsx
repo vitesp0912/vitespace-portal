@@ -133,7 +133,7 @@ function InvoiceRow({ invoice }: { invoice: Invoice }) {
           <Button
             size="sm"
             variant="outline"
-            className="rounded-full"
+            className="w-full rounded-full sm:w-auto"
             onClick={handleDownload}
           >
             <Download className="mr-1.5 h-3.5 w-3.5" />

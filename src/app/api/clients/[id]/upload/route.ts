@@ -26,9 +26,37 @@ type RouteContext = {
  *   file: File
  *   company?: string
  *   uploadedBy?: "client" | "vitespace"
+ *   asLogo?: "true" — admin only; stores as {company}/documents/logo.{ext}
+ *                    and sets clients.avatar
  *   // invoices: number, title, amount, issuedAt, dueAt, status
  *   // documents: category, name?
  */
+
+const LOGO_EXTS = new Set(["png", "jpg", "jpeg", "webp", "gif", "svg"]);
+
+function logoObjectName(fileName: string, mimeType: string): string {
+  const mime = mimeType.toLowerCase();
+  const fromMime: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
+  };
+  const fromName = fileName.split(".").pop()?.toLowerCase() ?? "";
+  const ext =
+    fromMime[mime] || (LOGO_EXTS.has(fromName) ? fromName : "png");
+  return `logo.${ext === "jpeg" ? "jpg" : ext}`;
+}
+
+function isImageFile(file: File): boolean {
+  const mime = file.type.toLowerCase();
+  if (mime.startsWith("image/")) return true;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return LOGO_EXTS.has(ext);
+}
+
 export async function POST(request: Request, context: RouteContext) {
   try {
     const { id: clientId } = await context.params;
@@ -105,6 +133,28 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
+    const asLogo = String(form.get("asLogo") || "") === "true";
+    if (asLogo) {
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: "Only Vitespace can set a client logo." },
+          { status: 403 }
+        );
+      }
+      if (kind !== "documents") {
+        return NextResponse.json(
+          { error: "Logo uploads must use the documents folder." },
+          { status: 400 }
+        );
+      }
+      if (!isImageFile(file)) {
+        return NextResponse.json(
+          { error: "Logo must be an image (PNG, JPG, WebP, GIF, or SVG)." },
+          { status: 400 }
+        );
+      }
+    }
+
     const supabase = getSupabaseAdmin();
     const { data: clientRow, error: clientError } = await supabase
       .from("clients")
@@ -131,7 +181,9 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
-    const originalName = safeFileName(file.name);
+    const originalName = asLogo
+      ? logoObjectName(file.name, file.type)
+      : safeFileName(file.name);
     const buffer = Buffer.from(await file.arrayBuffer());
     const { key, url } = await uploadToR2({
       company,
@@ -223,13 +275,29 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     // documents — any file type, max 15 MB
-    const displayName = String(form.get("name") || "").trim() || originalName;
-    const description = String(form.get("description") || "").trim() || null;
-    const category = String(form.get("category") || "").trim() || null;
+    const displayName = asLogo
+      ? "Logo"
+      : String(form.get("name") || "").trim() || originalName;
+    const description = asLogo
+      ? String(form.get("description") || "").trim() || "Client logo"
+      : String(form.get("description") || "").trim() || null;
+    const category = asLogo
+      ? "creative_assets"
+      : String(form.get("category") || "").trim() || null;
     const uploadedByRaw = String(form.get("uploadedBy") || "client").trim();
     const uploadedBy = uploadedByRaw === "vitespace" ? "vitespace" : "client";
     const mimeType = file.type || null;
-    const id = `doc_${Date.now()}`;
+
+    let id = `doc_${Date.now()}`;
+    if (asLogo) {
+      const { data: existingLogo } = await supabase
+        .from("documents")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("name", "Logo")
+        .maybeSingle();
+      if (existingLogo?.id) id = String(existingLogo.id);
+    }
 
     const uploadedByEmail = user.email?.trim() || null;
 
@@ -250,7 +318,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const { data, error } = await supabase
       .from("documents")
-      .insert(row)
+      .upsert(row, { onConflict: "id" })
       .select()
       .single();
 
@@ -264,10 +332,28 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
+    const avatarUrl = asLogo ? `${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}` : null;
+    if (asLogo) {
+      const { error: avatarError } = await supabase
+        .from("clients")
+        .update({ avatar: avatarUrl, last_updated_at: nowIso })
+        .eq("id", clientId);
+      if (avatarError) {
+        return NextResponse.json(
+          {
+            error: `Uploaded logo but failed to set profile picture: ${avatarError.message}`,
+            file: { key, url, fileName: originalName, fileSize },
+          },
+          { status: 502 }
+        );
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       kind,
       path: key,
+      avatar: avatarUrl ?? undefined,
       file: { key, url, fileName: originalName, fileSize },
       record: data,
       local: {

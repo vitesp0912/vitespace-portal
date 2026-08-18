@@ -25,6 +25,9 @@ export type TaskRow = {
   timelineStart?: string;
   timelineEnd?: string;
   days?: number;
+  deliverableUrl?: string;
+  deliverableLabel?: string;
+  deliveredItems?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -143,6 +146,15 @@ function mapTask(row: Record<string, unknown>): TaskRow {
     timelineStart: row.timeline_start ? String(row.timeline_start) : undefined,
     timelineEnd: row.timeline_end ? String(row.timeline_end) : undefined,
     days: row.days != null ? Number(row.days) : undefined,
+    deliverableUrl: row.deliverable_url
+      ? String(row.deliverable_url)
+      : undefined,
+    deliverableLabel: row.deliverable_label
+      ? String(row.deliverable_label)
+      : undefined,
+    deliveredItems: Array.isArray(row.delivered_items)
+      ? (row.delivered_items as string[])
+      : undefined,
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? ""),
   };

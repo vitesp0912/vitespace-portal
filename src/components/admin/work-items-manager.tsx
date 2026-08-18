@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,15 +29,23 @@ import type { TaskStatus, WorkItem } from "@/types";
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<TaskStatus, string> = {
-  pending: "bg-orange-500/10 text-orange-400 ring-orange-500/20",
-  requested: "bg-sky-500/10 text-sky-400 ring-sky-500/20",
-  pending_approval: "bg-amber-500/10 text-amber-400 ring-amber-500/20",
-  approved: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/20",
+  pending: "bg-orange-500/10 text-orange-700 ring-orange-500/20",
+  requested: "bg-sky-500/10 text-sky-700 ring-sky-500/20",
+  pending_approval: "bg-amber-500/10 text-amber-700 ring-amber-500/20",
+  approved: "bg-zinc-500/10 text-zinc-600 ring-zinc-500/20",
   in_progress: "bg-brand/10 text-brand ring-brand/20",
-  completed: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
-  rejected: "bg-red-500/10 text-red-400 ring-red-500/20",
+  completed: "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20",
+  rejected: "bg-red-500/10 text-red-700 ring-red-500/20",
   cancelled: "bg-zinc-500/10 text-zinc-500 ring-zinc-500/20",
 };
+
+const DELIVERABLE_LABELS = [
+  "View Page",
+  "View Property",
+  "Open Module",
+  "View Inventory",
+  "Download Report",
+] as const;
 
 interface WorkItemFormState {
   title: string;
@@ -46,6 +54,9 @@ interface WorkItemFormState {
   description: string;
   timelineStart: string;
   timelineEnd: string;
+  deliverableUrl: string;
+  deliverableLabel: string;
+  deliveredItems: string;
 }
 
 const emptyForm = (): WorkItemFormState => ({
@@ -55,6 +66,9 @@ const emptyForm = (): WorkItemFormState => ({
   description: "",
   timelineStart: "",
   timelineEnd: "",
+  deliverableUrl: "",
+  deliverableLabel: "View Page",
+  deliveredItems: "",
 });
 
 interface WorkItemsManagerProps {
@@ -132,6 +146,9 @@ export function WorkItemsManager({
       description: item.description ?? "",
       timelineStart: item.timelineStart ?? "",
       timelineEnd: item.timelineEnd ?? "",
+      deliverableUrl: item.deliverableUrl ?? "",
+      deliverableLabel: item.deliverableLabel ?? "View Page",
+      deliveredItems: (item.deliveredItems ?? []).join("\n"),
     });
     setDialogOpen(true);
   }
@@ -176,6 +193,21 @@ export function WorkItemsManager({
       return;
     }
 
+    const deliveredItems = form.deliveredItems
+      .split("\n")
+      .map((line) => line.replace(/^\s*[-•]\s*/, "").trim())
+      .filter(Boolean)
+      .slice(0, 20);
+
+    let deliverableUrl = form.deliverableUrl.trim();
+    if (deliverableUrl && !/^https?:\/\//i.test(deliverableUrl)) {
+      deliverableUrl = `https://${deliverableUrl}`;
+    }
+    if (deliverableUrl.length > 2048) {
+      setError("Output URL is too long.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -189,6 +221,9 @@ export function WorkItemsManager({
       description: form.description || undefined,
       timelineStart: form.timelineStart || undefined,
       timelineEnd: form.timelineEnd || undefined,
+      deliverableUrl: deliverableUrl || undefined,
+      deliverableLabel: form.deliverableLabel.trim() || "View Page",
+      deliveredItems,
       createdBy,
       createdByUserId: session.userId,
       createdByEmail: session.email || undefined,
@@ -357,6 +392,17 @@ export function WorkItemsManager({
                       <p className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">
                         {item.description}
                       </p>
+                    )}
+                    {item.deliverableUrl && (
+                      <a
+                        href={item.deliverableUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-brand hover:underline"
+                      >
+                        {item.deliverableLabel ?? "View Page"}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
                     )}
                     <div className="mt-2 flex flex-wrap items-center gap-2 lg:hidden">
                       <span className="text-[12px] text-muted-foreground">
@@ -579,6 +625,67 @@ export function WorkItemsManager({
                   : "—"}
               </span>
             </p>
+
+            <div className="grid gap-3 rounded-xl bg-muted/40 p-3 ring-1 ring-border/50">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Proof of work
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="task-output-url">Output URL</Label>
+                <Input
+                  id="task-output-url"
+                  type="url"
+                  value={form.deliverableUrl}
+                  onChange={(e) =>
+                    setForm({ ...form, deliverableUrl: e.target.value })
+                  }
+                  placeholder="https://…"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Link label</Label>
+                <Select
+                  value={form.deliverableLabel}
+                  onValueChange={(v) =>
+                    v && setForm({ ...form, deliverableLabel: v })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>{form.deliverableLabel}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DELIVERABLE_LABELS.map((label) => (
+                      <SelectItem key={label} value={label}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                    {form.deliverableLabel &&
+                      !(DELIVERABLE_LABELS as readonly string[]).includes(
+                        form.deliverableLabel
+                      ) && (
+                        <SelectItem value={form.deliverableLabel}>
+                          {form.deliverableLabel}
+                        </SelectItem>
+                      )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="task-delivered">Work delivered</Label>
+                <Textarea
+                  id="task-delivered"
+                  value={form.deliveredItems}
+                  onChange={(e) =>
+                    setForm({ ...form, deliveredItems: e.target.value })
+                  }
+                  rows={4}
+                  placeholder={"SEO content structure\nBlog page development\nInternal linking"}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  One bullet per line. Shown when the client expands the task.
+                </p>
+              </div>
+            </div>
 
             {error && <p className="text-[13px] text-red-600">{error}</p>}
           </div>

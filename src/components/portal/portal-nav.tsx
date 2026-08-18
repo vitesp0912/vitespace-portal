@@ -70,22 +70,30 @@ export function PortalNavMobile() {
   const mobileItems = portalNavItems.filter((i) => i.mobile);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-border bg-surface/95 px-2 py-2 backdrop-blur-lg lg:hidden">
-      {mobileItems.map((item) => {
-        const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-        const Icon = item.icon;
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface/95 px-1 pt-1 backdrop-blur-lg lg:hidden pb-[max(0.35rem,env(safe-area-inset-bottom))]">
+      <div className="flex items-stretch justify-around">
+        {mobileItems.map((item) => {
+          const isActive =
+            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const Icon = item.icon;
 
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn("flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 transition-colors", isActive ? "text-brand" : "text-muted-foreground")}
-          >
-            <Icon className="h-[18px] w-[18px]" />
-            <span className="text-[10px] font-medium">{item.label}</span>
-          </Link>
-        );
-      })}
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex min-h-[48px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-0.5 py-1 transition-colors",
+                isActive ? "text-brand" : "text-muted-foreground"
+              )}
+            >
+              <Icon className="h-[18px] w-[18px] shrink-0" />
+              <span className="max-w-full truncate text-[9px] font-medium leading-none sm:text-[10px]">
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

@@ -70,9 +70,15 @@ function uid(prefix: string) {
 
 function isThisMonth(dateString?: string) {
   if (!dateString) return false;
-  const d = new Date(dateString);
-  const n = new Date();
-  return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
+  const datePart = dateString.split("T")[0];
+  const [year, month] = datePart.split("-").map(Number);
+  if (!year || !month) return false;
+  const now = new Date();
+  return month === now.getMonth() + 1 && year === now.getFullYear();
+}
+
+function workItemMonthDate(item: WorkItem) {
+  return item.timelineStart || item.timelineEnd || item.createdAt;
 }
 
 function filterClient<T extends { clientId: string }>(items: T[], clientId: string) {
@@ -87,6 +93,7 @@ export interface ClientInput {
   status: Client["status"];
   projectStatus: ProjectStatus;
   projectName: string;
+  avatar?: string;
 }
 
 export interface WorkItemInput {
@@ -100,6 +107,9 @@ export interface WorkItemInput {
   createdBy?: "client" | "vitespace";
   createdByUserId?: string;
   createdByEmail?: string;
+  deliverableUrl?: string;
+  deliverableLabel?: string;
+  deliveredItems?: string[];
 }
 
 export interface ServiceInput {
@@ -392,7 +402,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         completedThisMonth: items.filter(
           (i) =>
             i.status === "completed" &&
-            isThisMonth(i.updatedAt.split("T")[0])
+            isThisMonth(workItemMonthDate(i))
         ).length,
         openRequests: filterClient(state.changeRequests, clientId).filter(
           (r) => !["completed", "rejected"].includes(r.status)
@@ -481,6 +491,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       if (input.projectStatus !== undefined)
         row.project_status = input.projectStatus;
       if (input.projectName !== undefined) row.project_name = input.projectName;
+      if (input.avatar !== undefined) row.avatar = input.avatar || null;
 
       const { error } = await createClient()
         .from("clients")
@@ -558,6 +569,11 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         timelineStart: input.timelineStart || undefined,
         timelineEnd: input.timelineEnd || undefined,
         days: taskInclusiveDays(input.timelineStart, input.timelineEnd),
+        deliverableUrl: input.deliverableUrl?.trim() || undefined,
+        deliverableLabel: input.deliverableLabel?.trim() || undefined,
+        deliveredItems: input.deliveredItems?.length
+          ? input.deliveredItems
+          : undefined,
         createdAt: ts,
         updatedAt: ts,
       };
@@ -623,6 +639,20 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
           input.timelineEnd !== undefined
             ? input.timelineEnd || undefined
             : existing.timelineEnd,
+        deliverableUrl:
+          input.deliverableUrl !== undefined
+            ? input.deliverableUrl.trim() || undefined
+            : existing.deliverableUrl,
+        deliverableLabel:
+          input.deliverableLabel !== undefined
+            ? input.deliverableLabel.trim() || undefined
+            : existing.deliverableLabel,
+        deliveredItems:
+          input.deliveredItems !== undefined
+            ? input.deliveredItems.length
+              ? input.deliveredItems
+              : undefined
+            : existing.deliveredItems,
         updatedAt: ts,
       };
       next.days = taskInclusiveDays(next.timelineStart, next.timelineEnd);
@@ -639,6 +669,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         created_by_email: next.createdByEmail ?? null,
         timeline_start: next.timelineStart || null,
         timeline_end: next.timelineEnd || null,
+        deliverable_url: next.deliverableUrl ?? null,
+        deliverable_label: next.deliverableLabel ?? null,
+        delivered_items: next.deliveredItems?.length ? next.deliveredItems : [],
       };
 
       const { error } = await createClient()
