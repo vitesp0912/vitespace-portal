@@ -10,6 +10,8 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isLogin = path === "/login";
+  const isResetPassword = path === "/reset-password";
+  const isPublicAuth = isLogin || isResetPassword;
   const isAdminRoute = path === "/admin" || path.startsWith("/admin/");
 
   // Old admin login URL → shared /login
@@ -24,7 +26,7 @@ export async function updateSession(request: NextRequest) {
     console.error(
       "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY"
     );
-    if (!isLogin) {
+    if (!isPublicAuth) {
       const login = request.nextUrl.clone();
       login.pathname = "/login";
       return NextResponse.redirect(login);
@@ -55,7 +57,7 @@ export async function updateSession(request: NextRequest) {
 
   const adminUser = Boolean(user && isAdminEmail(user.email));
 
-  if (!user && !isLogin) {
+  if (!user && !isPublicAuth) {
     const login = request.nextUrl.clone();
     login.pathname = "/login";
     return NextResponse.redirect(login);

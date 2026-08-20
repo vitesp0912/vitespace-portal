@@ -6,7 +6,7 @@ import { isAdminEmail } from "@/lib/admin";
 import { useClientAuth } from "@/lib/client-auth";
 import { usePortal } from "@/lib/portal-store";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/reset-password"];
 
 export function AuthSessionSync() {
   const { session, hydrated: authHydrated } = useClientAuth();
