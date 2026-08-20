@@ -5,6 +5,7 @@ import { ClientAuthProvider } from "@/lib/client-auth";
 import { AuthSessionSync } from "@/components/portal/portal-auth-guard";
 import { MessagesRealtime } from "@/components/messages/messages-realtime";
 import { NotificationsRealtime } from "@/components/notifications/notifications-realtime";
+import { DocumentsRealtime } from "@/components/documents/documents-realtime";
 import { portalFont } from "@/lib/fonts";
 import "./globals.css";
 
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <AuthSessionSync />
             <MessagesRealtime />
             <NotificationsRealtime />
+            <DocumentsRealtime />
             {children}
           </ClientAuthProvider>
         </PortalProvider>

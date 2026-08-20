@@ -103,6 +103,10 @@ function mapDocument(row: Record<string, unknown>): Document {
   };
 }
 
+export function mapDocumentRow(row: Record<string, unknown>): Document {
+  return mapDocument(row);
+}
+
 function mapMessage(row: Record<string, unknown>): Message {
   return {
     id: String(row.id),

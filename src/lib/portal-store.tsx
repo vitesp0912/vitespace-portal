@@ -313,6 +313,8 @@ type PortalContextValue = PortalState & {
   markAllNotificationsRead: (clientId: string) => void;
   upsertRealtimeNotification: (notification: Notification) => void;
   removeRealtimeNotification: (id: string) => void;
+  upsertRealtimeDocument: (document: Document) => void;
+  removeRealtimeDocument: (id: string) => void;
   refreshFromSupabase: (options?: {
     isAdmin?: boolean;
   }) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -1464,6 +1466,31 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     [patch]
   );
 
+  const upsertRealtimeDocument = useCallback(
+    (document: Document) => {
+      patch((s) => {
+        const idx = s.documents.findIndex((d) => d.id === document.id);
+        if (idx === -1) {
+          return { ...s, documents: [document, ...s.documents] };
+        }
+        const next = s.documents.slice();
+        next[idx] = document;
+        return { ...s, documents: next };
+      });
+    },
+    [patch]
+  );
+
+  const removeRealtimeDocument = useCallback(
+    (id: string) => {
+      patch((s) => ({
+        ...s,
+        documents: s.documents.filter((d) => d.id !== id),
+      }));
+    },
+    [patch]
+  );
+
   const resetToSeed = useCallback(() => {
     void refreshFromSupabase();
   }, [refreshFromSupabase]);
@@ -1538,6 +1565,8 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       markAllNotificationsRead,
       upsertRealtimeNotification,
       removeRealtimeNotification,
+      upsertRealtimeDocument,
+      removeRealtimeDocument,
       refreshFromSupabase,
       resetToSeed,
     }),
@@ -1610,6 +1639,8 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       markAllNotificationsRead,
       upsertRealtimeNotification,
       removeRealtimeNotification,
+      upsertRealtimeDocument,
+      removeRealtimeDocument,
       refreshFromSupabase,
       resetToSeed,
     ]
