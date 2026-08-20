@@ -1,5 +1,6 @@
 "use client";
 
+import { useClientAuth } from "@/lib/client-auth";
 import { useClientPortal } from "@/lib/portal-store";
 import { formatLongDate, formatRelativeTime, getGreeting } from "@/lib/format";
 import { PortalPage } from "@/components/portal/portal-page";
@@ -15,8 +16,12 @@ import { QuickLinks } from "@/components/portal/quick-links";
 import { SupportCta } from "@/components/portal/support-cta";
 
 export function OverviewPage() {
+  const { session } = useClientAuth();
   const { client, workStats } = useClientPortal();
   if (!client) return null;
+
+  const greetingName =
+    session?.displayName?.trim() || session?.email || client.company;
 
   const summaryStats = buildSummaryStats({
     completedThisMonth: workStats.completedThisMonth,
@@ -30,10 +35,10 @@ export function OverviewPage() {
       <header className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-xl">
           <h1 className="text-[22px] font-semibold tracking-tight text-foreground sm:text-[28px] lg:text-[32px]">
-            {getGreeting()}, {client.name} 👋
+            {getGreeting()}, {greetingName} 👋
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
-            Here&apos;s what&apos;s happening with your project.
+            Here&apos;s what&apos;s happening with {client.company}.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground/80">
             <span>{formatLongDate()}</span>

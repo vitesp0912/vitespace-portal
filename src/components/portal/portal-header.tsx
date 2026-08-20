@@ -27,7 +27,7 @@ import { ClientAvatar } from "@/components/shared/client-avatar";
 
 export function PortalHeader() {
   const router = useRouter();
-  const { logout } = useClientAuth();
+  const { session, logout } = useClientAuth();
   const { client, notifications, markNotificationRead, markAllNotificationsRead, setActiveClientId } =
     useClientPortal();
 
@@ -103,14 +103,18 @@ export function PortalHeader() {
               className="h-7 w-7 text-[11px]"
             />
             <div className="hidden text-left sm:block">
-              <p className="text-[13px] font-medium leading-none">{client.name}</p>
+              <p className="text-[13px] font-medium leading-none">
+                {session?.displayName || session?.email || client.company}
+              </p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">{client.company}</p>
             </div>
             <ChevronDown className="hidden h-3.5 w-3.5 text-muted-foreground sm:block" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem disabled>
-              <span className="text-[12px] text-muted-foreground">{client.email}</span>
+              <span className="text-[12px] text-muted-foreground">
+                {session?.email || client.email}
+              </span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled>Account settings</DropdownMenuItem>

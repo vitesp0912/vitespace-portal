@@ -228,12 +228,25 @@ export async function fetchPortalSnapshot(
 }
 
 export async function resolveUserAccess(supabase: SupabaseClient, userId: string) {
-  const membershipRes = await supabase
+  // Prefer name; fall back if migration 016 is not applied yet
+  let membershipRes = await supabase
     .from("client_users")
-    .select("client_id, role")
+    .select("client_id, role, name")
     .eq("user_id", userId)
     .limit(1)
     .maybeSingle();
+
+  if (
+    membershipRes.error &&
+    /column .*name.* does not exist/i.test(membershipRes.error.message)
+  ) {
+    membershipRes = await supabase
+      .from("client_users")
+      .select("client_id, role")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+  }
 
   if (membershipRes.error) throw new Error(membershipRes.error.message);
 
@@ -248,9 +261,14 @@ export async function resolveUserAccess(supabase: SupabaseClient, userId: string
     isAdmin = Boolean(adminRes.data);
   }
 
+  const row = membershipRes.data as
+    | { client_id?: string; role?: string; name?: string | null }
+    | null;
+
   return {
     isAdmin,
-    clientId: membershipRes.data?.client_id ?? null,
-    role: membershipRes.data?.role ?? null,
+    clientId: row?.client_id ?? null,
+    role: row?.role ?? null,
+    displayName: row?.name ? String(row.name) : null,
   };
 }

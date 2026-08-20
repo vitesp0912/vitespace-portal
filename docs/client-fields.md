@@ -95,6 +95,7 @@ Needed so someone can log into the **client portal** for that client. Not filled
 | `user_id` | `uuid` | Yes | References `auth.users(id)` (Supabase Auth user) |
 | `client_id` | `text` | Yes | References `clients(id)` |
 | `role` | `text` | Yes | `owner` or `member`. Default `member` |
+| `name` | `text` | No | Portal user's display name (shown in client portal) |
 
 Constraint: unique pair `(user_id, client_id)`.
 
@@ -106,9 +107,12 @@ create table client_users (
   user_id uuid references auth.users(id) on delete cascade,
   client_id text references clients(id) on delete cascade,
   role text not null default 'member' check (role in ('owner','member')),
+  name text,
   unique(user_id, client_id)
 );
 ```
+
+Run `016_client_users_name.sql` if the table already exists without `name`.
 
 ---
 

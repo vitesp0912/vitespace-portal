@@ -20,6 +20,7 @@ create table if not exists client_users (
   user_id uuid not null references auth.users (id) on delete cascade,
   client_id text not null references clients (id) on delete cascade,
   role text not null default 'member' check (role in ('owner', 'member')),
+  name text,
   unique (user_id, client_id)
 );
 

@@ -13,6 +13,8 @@ Tables after the slim redesign. Run in order:
 9. `supabase/migrations/013_documents_uploader_email.sql` (uploaded_by_email)
 10. `supabase/migrations/014_tasks_pending_status.sql` (pending status)
 11. `supabase/migrations/015_documents_update_own_upload.sql` (client can only edit own uploads)
+12. `supabase/migrations/016_client_users_name.sql` (portal user display name)
+
 
 Auth sessions: use built-in Supabase Auth — no custom sessions table.
 

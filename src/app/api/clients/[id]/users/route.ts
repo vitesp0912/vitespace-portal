@@ -77,7 +77,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
     const { data: rows, error } = await admin
       .from("client_users")
-      .select("id, user_id, client_id, role")
+      .select("id, user_id, client_id, role, name")
       .eq("client_id", clientId)
       .order("role", { ascending: true });
 
@@ -93,6 +93,7 @@ export async function GET(_request: Request, context: RouteContext) {
           userId: row.user_id as string,
           clientId: row.client_id as string,
           role: row.role as "owner" | "member",
+          name: row.name ? String(row.name) : null,
           email: userData.user?.email ?? null,
         };
       })
@@ -107,7 +108,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 /**
  * POST /api/clients/[id]/users
- * Body: { email, password?, role?: "owner" | "member" }
+ * Body: { name, email, password?, role?: "owner" | "member" }
  * Creates Auth user if needed, then links to client_users.
  */
 export async function POST(request: Request, context: RouteContext) {
@@ -117,16 +118,22 @@ export async function POST(request: Request, context: RouteContext) {
 
     const { id: clientId } = await context.params;
     const body = (await request.json()) as {
+      name?: string;
       email?: string;
       password?: string;
       role?: string;
     };
 
+    const name = String(body.name || "").trim();
     const email = String(body.email || "")
       .trim()
       .toLowerCase();
     const password = String(body.password || "");
     const role = body.role === "owner" ? "owner" : "member";
+
+    if (!name) {
+      return NextResponse.json({ error: "Name is required." }, { status: 400 });
+    }
 
     if (!email || !email.includes("@")) {
       return NextResponse.json({ error: "Valid email is required." }, { status: 400 });
@@ -166,6 +173,7 @@ export async function POST(request: Request, context: RouteContext) {
           email,
           password,
           email_confirm: true,
+          user_metadata: { name },
         });
 
       if (createError || !createdUser.user) {
@@ -199,8 +207,9 @@ export async function POST(request: Request, context: RouteContext) {
         user_id: userId,
         client_id: clientId,
         role,
+        name,
       })
-      .select("id, user_id, client_id, role")
+      .select("id, user_id, client_id, role, name")
       .single();
 
     if (linkError || !link) {
@@ -222,6 +231,7 @@ export async function POST(request: Request, context: RouteContext) {
         userId: link.user_id,
         clientId: link.client_id,
         role: link.role,
+        name: link.name,
         email,
       },
     });

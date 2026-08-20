@@ -25,6 +25,7 @@ type ClientPortalUser = {
   userId: string;
   clientId: string;
   role: "owner" | "member";
+  name: string | null;
   email: string | null;
 };
 
@@ -36,6 +37,7 @@ export function ClientUsersManager({ clientId }: { clientId: string }) {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState({
+    name: "",
     email: "",
     password: "",
     role: "member" as "owner" | "member",
@@ -62,7 +64,7 @@ export function ClientUsersManager({ clientId }: { clientId: string }) {
   }, [loadUsers]);
 
   async function handleAdd() {
-    if (!form.email.trim()) return;
+    if (!form.name.trim() || !form.email.trim()) return;
     setSaving(true);
     setFormError(null);
     try {
@@ -70,6 +72,7 @@ export function ClientUsersManager({ clientId }: { clientId: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: form.name.trim(),
           email: form.email.trim(),
           password: form.password,
           role: form.role,
@@ -78,7 +81,7 @@ export function ClientUsersManager({ clientId }: { clientId: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to add user");
       setOpen(false);
-      setForm({ email: "", password: "", role: "member" });
+      setForm({ name: "", email: "", password: "", role: "member" });
       await loadUsers();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Failed to add user");
@@ -90,7 +93,7 @@ export function ClientUsersManager({ clientId }: { clientId: string }) {
   async function handleRemove(user: ClientPortalUser) {
     if (
       !confirm(
-        `Delete ${user.email || "this user"}? They will be removed from this client and deleted from Supabase Authentication.`
+        `Delete ${user.name || user.email || "this user"}? They will be removed from this client and deleted from Supabase Authentication.`
       )
     ) {
       return;
@@ -123,7 +126,7 @@ export function ClientUsersManager({ clientId }: { clientId: string }) {
           className="rounded-full"
           onClick={() => {
             setFormError(null);
-            setForm({ email: "", password: "", role: "member" });
+            setForm({ name: "", email: "", password: "", role: "member" });
             setOpen(true);
           }}
         >
@@ -152,10 +155,12 @@ export function ClientUsersManager({ clientId }: { clientId: string }) {
             >
               <div className="min-w-0">
                 <p className="truncate text-[14px] font-medium">
-                  {user.email || "Unknown email"}
+                  {user.name || "Unnamed user"}
                 </p>
-                <p className="mt-0.5 text-[12px] capitalize text-muted-foreground">
-                  {user.role}
+                <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                  {user.email || "Unknown email"}
+                  {" · "}
+                  <span className="capitalize">{user.role}</span>
                 </p>
               </div>
               <Button
@@ -178,6 +183,15 @@ export function ClientUsersManager({ clientId }: { clientId: string }) {
             <DialogTitle>Add portal user</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-1">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Jane Doe"
+                disabled={saving}
+              />
+            </div>
             <div className="space-y-1.5">
               <Label>Email</Label>
               <Input
@@ -238,7 +252,7 @@ export function ClientUsersManager({ clientId }: { clientId: string }) {
             <Button
               className="rounded-full"
               onClick={() => void handleAdd()}
-              disabled={!form.email.trim() || saving}
+              disabled={!form.name.trim() || !form.email.trim() || saving}
             >
               {saving ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { ChatFrame, ProjectChat } from "@/components/messages/project-chat";
+import { useClientAuth } from "@/lib/client-auth";
 import { useClientPortal } from "@/lib/portal-store";
 import type { Message } from "@/types";
 
 export function MessagesPage() {
+  const { session } = useClientAuth();
   const { client, clientId, messages, addMessage, updateMessage } =
     useClientPortal();
   const [sending, setSending] = useState(false);
@@ -15,7 +17,18 @@ export function MessagesPage() {
     if (!clientId || sending) return false;
     setSending(true);
     setError(null);
-    const result = await addMessage(clientId, { content }, "client");
+    const result = await addMessage(
+      clientId,
+      {
+        content,
+        senderName:
+          session?.displayName?.trim() ||
+          session?.email ||
+          client?.company ||
+          "Client",
+      },
+      "client"
+    );
     setSending(false);
     if (!result.ok) {
       setError(result.error);

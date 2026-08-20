@@ -178,6 +178,8 @@ export interface DocumentInput {
 
 export interface MessageInput {
   content: string;
+  /** Override display name (e.g. portal user name from client_users) */
+  senderName?: string;
   context?: Message["context"];
   contextLabel?: string;
   contextHref?: string;
@@ -1139,7 +1141,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         id: uid("m"),
         clientId,
         sender,
-        senderName: sender === "client" ? (client?.name ?? "Client") : "Vitespace",
+        senderName:
+          input.senderName?.trim() ||
+          (sender === "client" ? (client?.company ?? "Client") : "Vitespace"),
         content: input.content.trim(),
         timestamp: new Date().toISOString(),
         context: input.context,

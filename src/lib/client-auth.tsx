@@ -19,6 +19,9 @@ export interface ClientSession {
   clientId: string | null;
   userId: string;
   isAdmin: boolean;
+  /** Display name from client_users.name for portal users */
+  displayName?: string | null;
+  role?: string | null;
 }
 
 type LoginResult =
@@ -39,7 +42,12 @@ const ClientAuthContext = createContext<ClientAuthContextValue | null>(null);
 
 function sessionFromAccess(
   authUser: User,
-  access: { clientId: string | null; isAdmin: boolean }
+  access: {
+    clientId: string | null;
+    isAdmin: boolean;
+    displayName?: string | null;
+    role?: string | null;
+  }
 ): ClientSession | null {
   const email = authUser.email ?? "";
   const admin = isAdminEmail(email);
@@ -50,6 +58,8 @@ function sessionFromAccess(
       userId: authUser.id,
       isAdmin: true,
       clientId: access.clientId,
+      displayName: access.displayName,
+      role: access.role,
     };
   }
 
@@ -60,6 +70,8 @@ function sessionFromAccess(
     userId: authUser.id,
     isAdmin: false,
     clientId: access.clientId,
+    displayName: access.displayName,
+    role: access.role,
   };
 }
 
