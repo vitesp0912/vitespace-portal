@@ -22,6 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useClientPortal } from "@/lib/portal-store";
 import { useClientAuth } from "@/lib/client-auth";
 import { formatRelativeTime } from "@/lib/format";
+import { formatUnreadBadge } from "@/lib/message-thread-view";
 import { cn } from "@/lib/utils";
 import { ClientAvatar } from "@/components/shared/client-avatar";
 
@@ -40,6 +41,7 @@ export function PortalHeader() {
   }
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadLabel = formatUnreadBadge(unreadCount);
 
   return (
     <header className="sticky top-0 z-40 flex h-[56px] shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl sm:h-[60px] sm:gap-4 sm:px-6 lg:px-8">
@@ -56,9 +58,9 @@ export function PortalHeader() {
             }
           >
             <Bell className="h-[18px] w-[18px]" />
-            {unreadCount > 0 && (
-              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand text-[9px] font-bold text-white animate-pulse-soft">
-                {unreadCount}
+            {unreadLabel && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[9px] font-bold text-white animate-pulse-soft">
+                {unreadLabel}
               </span>
             )}
           </SheetTrigger>

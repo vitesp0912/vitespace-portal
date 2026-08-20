@@ -311,6 +311,8 @@ type PortalContextValue = PortalState & {
   deleteNotification: (id: string) => void;
   markNotificationRead: (id: string, read?: boolean) => void;
   markAllNotificationsRead: (clientId: string) => void;
+  upsertRealtimeNotification: (notification: Notification) => void;
+  removeRealtimeNotification: (id: string) => void;
   refreshFromSupabase: (options?: {
     isAdmin?: boolean;
   }) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -1437,6 +1439,31 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     [patch]
   );
 
+  const upsertRealtimeNotification = useCallback(
+    (notification: Notification) => {
+      patch((s) => {
+        const idx = s.notifications.findIndex((n) => n.id === notification.id);
+        if (idx === -1) {
+          return { ...s, notifications: [notification, ...s.notifications] };
+        }
+        const next = s.notifications.slice();
+        next[idx] = notification;
+        return { ...s, notifications: next };
+      });
+    },
+    [patch]
+  );
+
+  const removeRealtimeNotification = useCallback(
+    (id: string) => {
+      patch((s) => ({
+        ...s,
+        notifications: s.notifications.filter((n) => n.id !== id),
+      }));
+    },
+    [patch]
+  );
+
   const resetToSeed = useCallback(() => {
     void refreshFromSupabase();
   }, [refreshFromSupabase]);
@@ -1509,6 +1536,8 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       deleteNotification,
       markNotificationRead,
       markAllNotificationsRead,
+      upsertRealtimeNotification,
+      removeRealtimeNotification,
       refreshFromSupabase,
       resetToSeed,
     }),
@@ -1579,6 +1608,8 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       deleteNotification,
       markNotificationRead,
       markAllNotificationsRead,
+      upsertRealtimeNotification,
+      removeRealtimeNotification,
       refreshFromSupabase,
       resetToSeed,
     ]

@@ -141,6 +141,10 @@ function mapNotification(row: Record<string, unknown>): Notification {
   };
 }
 
+export function mapNotificationRow(row: Record<string, unknown>): Notification {
+  return mapNotification(row);
+}
+
 function mapTask(row: Record<string, unknown>): TaskRow {
   const serviceJoin = row.services as Record<string, unknown> | null | undefined;
   return {
