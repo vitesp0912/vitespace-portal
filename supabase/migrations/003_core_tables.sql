@@ -88,6 +88,7 @@ create index if not exists idx_documents_client on documents (client_id);
 create table if not exists messages (
   id text primary key,
   client_id text not null references clients (id) on delete cascade,
+  user_id uuid references auth.users (id) on delete cascade,
   sender text not null check (sender in ('client', 'vitespace')),
   sender_name text not null,
   content text not null,
@@ -97,6 +98,7 @@ create table if not exists messages (
 
 create index if not exists idx_messages_client on messages (client_id);
 create index if not exists idx_messages_created on messages (client_id, created_at desc);
+create index if not exists idx_messages_thread on messages (client_id, user_id, created_at);
 
 -- ---------------------------------------------------------------------------
 -- Notifications (in-app; email later)
@@ -165,17 +167,19 @@ create policy "documents_update_own_as_client"
     and client_id in (select client_id from client_users where user_id = auth.uid())
   );
 
--- Messages: read own thread; client can send as client
+-- Messages: each portal user only sees their own thread with Vitespace
 create policy "messages_select_own"
   on messages for select
   using (
-    client_id in (select client_id from client_users where user_id = auth.uid())
+    user_id = auth.uid()
+    and client_id in (select client_id from client_users where user_id = auth.uid())
   );
 
 create policy "messages_insert_own_as_client"
   on messages for insert
   with check (
     sender = 'client'
+    and user_id = auth.uid()
     and client_id in (select client_id from client_users where user_id = auth.uid())
   );
 
@@ -183,10 +187,12 @@ create policy "messages_update_own_as_client"
   on messages for update
   using (
     sender = 'client'
+    and user_id = auth.uid()
     and client_id in (select client_id from client_users where user_id = auth.uid())
   )
   with check (
     sender = 'client'
+    and user_id = auth.uid()
     and client_id in (select client_id from client_users where user_id = auth.uid())
   );
 

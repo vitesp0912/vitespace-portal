@@ -178,6 +178,8 @@ export interface DocumentInput {
 
 export interface MessageInput {
   content: string;
+  /** Auth user id of the portal user for this DM thread (required) */
+  userId: string;
   /** Override display name (e.g. portal user name from client_users) */
   senderName?: string;
   context?: Message["context"];
@@ -216,7 +218,7 @@ type PortalContextValue = PortalState & {
   getApprovalsForClient: (clientId: string) => Approval[];
   getInvoicesForClient: (clientId: string) => Invoice[];
   getDocumentsForClient: (clientId: string) => Document[];
-  getMessagesForClient: (clientId: string) => Message[];
+  getMessagesForClient: (clientId: string, threadUserId?: string) => Message[];
   getRoadmapForClient: (clientId: string) => RoadmapItem[];
   getNotificationsForClient: (clientId: string) => Notification[];
   getOverallProgress: (clientId: string) => number;
@@ -830,10 +832,15 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     [state.documents]
   );
   const getMessagesForClient = useCallback(
-    (clientId: string) =>
-      filterClient(state.messages, clientId).sort(
-        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      ),
+    (clientId: string, threadUserId?: string) =>
+      filterClient(state.messages, clientId)
+        .filter((m) =>
+          threadUserId ? m.userId === threadUserId : true
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        ),
     [state.messages]
   );
   const getRoadmapForClient = useCallback(
@@ -1136,10 +1143,16 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       input: MessageInput,
       sender: "client" | "vitespace" = "vitespace"
     ): Promise<{ ok: true; message: Message } | { ok: false; error: string }> => {
+      const threadUserId = input.userId?.trim();
+      if (!threadUserId) {
+        return { ok: false, error: "Select a portal user for this conversation." };
+      }
+
       const client = state.clients.find((c) => c.id === clientId);
       const msg: Message = {
         id: uid("m"),
         clientId,
+        userId: threadUserId,
         sender,
         senderName:
           input.senderName?.trim() ||
@@ -1155,6 +1168,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.from("messages").insert({
         id: msg.id,
         client_id: clientId,
+        user_id: threadUserId,
         sender: msg.sender,
         sender_name: msg.senderName,
         content: msg.content,

@@ -14,6 +14,7 @@ Tables after the slim redesign. Run in order:
 10. `supabase/migrations/014_tasks_pending_status.sql` (pending status)
 11. `supabase/migrations/015_documents_update_own_upload.sql` (client can only edit own uploads)
 12. `supabase/migrations/016_client_users_name.sql` (portal user display name)
+13. `supabase/migrations/017_messages_user_thread.sql` (per-user DM threads)
 
 
 Auth sessions: use built-in Supabase Auth — no custom sessions table.
@@ -114,11 +115,14 @@ Run `015_documents_update_own_upload.sql` so clients can only update files they 
 |--------|------|----------|-------|
 | `id` | text | Yes | PK |
 | `client_id` | text | Yes | → `clients.id` |
+| `user_id` | uuid | No* | → `auth.users.id` — portal user who owns this DM thread (*required for new messages) |
 | `sender` | text | Yes | `client` \| `vitespace` |
 | `sender_name` | text | Yes | |
 | `content` | text | Yes | |
 | `created_at` | timestamptz | Yes | |
 | `edited_at` | timestamptz | No | Set when the sender edits the message |
+
+Each portal user has their own thread with Vitespace. Client RLS: `user_id = auth.uid()`. Vitespace replies use the **same** `user_id` as that portal user. Run `017_messages_user_thread.sql`.
 
 Email (Resend) deferred — in-app only.
 

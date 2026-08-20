@@ -105,6 +105,7 @@ function mapMessage(row: Record<string, unknown>): Message {
   return {
     id: String(row.id),
     clientId: String(row.client_id),
+    userId: row.user_id ? String(row.user_id) : undefined,
     sender: row.sender as Message["sender"],
     senderName: String(row.sender_name),
     content: String(row.content),

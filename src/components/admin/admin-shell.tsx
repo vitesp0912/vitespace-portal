@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
   Building2,
   LayoutGrid,
   ListTodo,
+  Loader2,
   LogOut,
   Settings,
   Receipt,
@@ -14,6 +16,13 @@ import {
   MessageSquare,
   Bell,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useClientAuth } from "@/lib/client-auth";
 
@@ -22,6 +31,12 @@ interface AdminShellProps {
   clientName?: string;
   children: React.ReactNode;
 }
+
+type PortalUser = {
+  userId: string;
+  name: string | null;
+  email: string | null;
+};
 
 const CLIENT_SECTIONS = (clientId: string) => [
   { href: `/admin/clients/${clientId}`, label: "Overview", icon: LayoutGrid, end: true },
@@ -33,12 +48,184 @@ const CLIENT_SECTIONS = (clientId: string) => [
   { href: `/admin/clients/${clientId}/notifications`, label: "Notifications", icon: Bell },
 ];
 
+function userDisplayName(u: PortalUser) {
+  return u.name?.trim() || "Portal user";
+}
+
+function usePortalUsers(clientId: string) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const selectedUserId = searchParams.get("user") ?? "";
+
+  const setThreadUser = useCallback(
+    (userId: string) => {
+      router.replace(
+        `/admin/clients/${clientId}/messages?user=${encodeURIComponent(userId)}`,
+        { scroll: false }
+      );
+    },
+    [clientId, router]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingUsers(true);
+    void fetch(`/api/clients/${clientId}/users`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to load users");
+        return (data.users as PortalUser[]) ?? [];
+      })
+      .then((list) => {
+        if (cancelled) return;
+        setPortalUsers(list);
+        const current = new URLSearchParams(window.location.search).get("user");
+        if (current && list.some((u) => u.userId === current)) return;
+        if (list[0]?.userId) {
+          router.replace(
+            `/admin/clients/${clientId}/messages?user=${encodeURIComponent(list[0].userId)}`,
+            { scroll: false }
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPortalUsers([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingUsers(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, router]);
+
+  const selectedUser = portalUsers.find((u) => u.userId === selectedUserId) ?? null;
+
+  return {
+    portalUsers,
+    loadingUsers,
+    selectedUserId,
+    selectedUser,
+    setThreadUser,
+  };
+}
+
+function MessagesUserPicker({
+  clientId,
+  compact = false,
+}: {
+  clientId: string;
+  compact?: boolean;
+}) {
+  const {
+    portalUsers,
+    loadingUsers,
+    selectedUserId,
+    selectedUser,
+    setThreadUser,
+  } = usePortalUsers(clientId);
+
+  if (loadingUsers) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-2 text-muted-foreground",
+          compact ? "px-1 py-1" : "px-3 py-2"
+        )}
+      >
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        {!compact && <span className="text-[11px]">Loading users…</span>}
+      </div>
+    );
+  }
+
+  if (portalUsers.length === 0) {
+    return (
+      <p
+        className={cn(
+          "text-[11px] text-muted-foreground",
+          compact ? "px-1 py-1" : "px-3 py-1.5"
+        )}
+      >
+        No portal users
+      </p>
+    );
+  }
+
+  return (
+    <Select
+      value={selectedUserId}
+      onValueChange={(v) => v && setThreadUser(v)}
+    >
+      <SelectTrigger
+        className={cn(
+          "h-8 w-full min-w-0 border-border/70 bg-background text-[12px]",
+          compact ? "rounded-full" : "rounded-md"
+        )}
+      >
+        <SelectValue placeholder="Select user">
+          {selectedUser ? userDisplayName(selectedUser) : "Select user"}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent align="start" className="min-w-[var(--anchor-width)]">
+        {portalUsers.map((u) => (
+          <SelectItem key={u.userId} value={u.userId} className="text-[12px]">
+            <span className="block truncate">{userDisplayName(u)}</span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function MessagesHeaderUserName({ clientId }: { clientId: string }) {
+  const { selectedUser, loadingUsers } = usePortalUsers(clientId);
+
+  if (loadingUsers || !selectedUser) return null;
+
+  return (
+    <>
+      <span className="hidden text-muted-foreground/40 sm:inline">/</span>
+      <span className="min-w-0 truncate text-[14px] font-medium text-muted-foreground">
+        {userDisplayName(selectedUser)}
+      </span>
+    </>
+  );
+}
+
+function MessagesUserPickerSuspense({
+  clientId,
+  compact,
+}: {
+  clientId: string;
+  compact?: boolean;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center px-3 py-2 text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        </div>
+      }
+    >
+      <MessagesUserPicker clientId={clientId} compact={compact} />
+    </Suspense>
+  );
+}
+
 export function AdminShell({ clientId, clientName, children }: AdminShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useClientAuth();
   const isClientView = Boolean(clientId);
   const clientTabs = clientId ? CLIENT_SECTIONS(clientId) : [];
+  const messagesHref = clientId
+    ? `/admin/clients/${clientId}/messages`
+    : "";
+  const isMessagesPage = Boolean(clientId && pathname === messagesHref);
 
   function isActive(href: string, end?: boolean) {
     if (end) return pathname === href;
@@ -91,20 +278,31 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
               {clientTabs.map((tab) => {
                 const Icon = tab.icon;
                 const active = isActive(tab.href, tab.end);
+                const isMessages = tab.href === messagesHref;
+
                 return (
-                  <Link
-                    key={tab.href}
-                    href={tab.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-[12px] font-medium transition-all duration-200",
-                      active
-                        ? "bg-brand/10 text-foreground ring-1 ring-brand/10"
-                        : "text-sidebar-foreground hover:bg-muted hover:text-foreground"
+                  <div key={tab.href} className="mb-0.5">
+                    <Link
+                      href={tab.href}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-[12px] font-medium transition-all duration-200",
+                        active
+                          ? "bg-brand/10 text-foreground ring-1 ring-brand/10"
+                          : "text-sidebar-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <Icon className={cn("h-4 w-4 shrink-0", active ? "text-brand" : "opacity-70")} />
+                      {tab.label}
+                    </Link>
+                    {isMessages && isMessagesPage && clientId && (
+                      <div className="mt-1.5 mb-1 pl-3 pr-1">
+                        <p className="mb-1 px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Portal user
+                        </p>
+                        <MessagesUserPickerSuspense clientId={clientId} />
+                      </div>
                     )}
-                  >
-                    <Icon className={cn("h-4 w-4 shrink-0", active ? "text-brand" : "opacity-70")} />
-                    {tab.label}
-                  </Link>
+                  </div>
                 );
               })}
             </div>
@@ -135,6 +333,12 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
           <span className="min-w-0 truncate text-[14px] font-medium text-foreground">
             {isClientView ? clientName : "Dashboard"}
           </span>
+          {isMessagesPage && clientId && (
+            <Suspense fallback={null}>
+              <MessagesHeaderUserName clientId={clientId} />
+            </Suspense>
+          )}
+
           <button
             type="button"
             onClick={() => void handleLogout()}
@@ -146,26 +350,33 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
         </header>
 
         {isClientView && (
-          <div className="flex gap-1 overflow-x-auto border-b border-border/60 px-3 py-2 [scrollbar-width:none] lg:hidden">
-            {clientTabs.map((tab) => {
-              const Icon = tab.icon;
-              const active = isActive(tab.href, tab.end);
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium whitespace-nowrap",
-                    active
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                </Link>
-              );
-            })}
+          <div className="border-b border-border/60 lg:hidden">
+            <div className="flex gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none]">
+              {clientTabs.map((tab) => {
+                const Icon = tab.icon;
+                const active = isActive(tab.href, tab.end);
+                return (
+                  <Link
+                    key={tab.href}
+                    href={tab.href}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium whitespace-nowrap",
+                      active
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground"
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {tab.label}
+                  </Link>
+                );
+              })}
+            </div>
+            {isMessagesPage && clientId && (
+              <div className="px-3 pb-2">
+                <MessagesUserPickerSuspense clientId={clientId} compact />
+              </div>
+            )}
           </div>
         )}
 

@@ -173,6 +173,8 @@ export interface Document {
 export interface Message {
   id: string;
   clientId: string;
+  /** Portal user (auth.users.id) who owns this DM thread with Vitespace */
+  userId?: string;
   sender: "client" | "vitespace";
   senderName: string;
   content: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChatFrame, ProjectChat } from "@/components/messages/project-chat";
 import { useClientAuth } from "@/lib/client-auth";
 import { useClientPortal } from "@/lib/portal-store";
@@ -8,19 +8,29 @@ import type { Message } from "@/types";
 
 export function MessagesPage() {
   const { session } = useClientAuth();
-  const { client, clientId, messages, addMessage, updateMessage } =
+  const { client, clientId, getMessagesForClient, addMessage, updateMessage } =
     useClientPortal();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const threadUserId = session?.userId;
+  const messages = useMemo(
+    () =>
+      clientId && threadUserId
+        ? getMessagesForClient(clientId, threadUserId)
+        : [],
+    [clientId, threadUserId, getMessagesForClient]
+  );
+
   async function handleSend(content: string) {
-    if (!clientId || sending) return false;
+    if (!clientId || !threadUserId || sending) return false;
     setSending(true);
     setError(null);
     const result = await addMessage(
       clientId,
       {
         content,
+        userId: threadUserId,
         senderName:
           session?.displayName?.trim() ||
           session?.email ||
@@ -44,7 +54,11 @@ export function MessagesPage() {
   }
 
   function canEdit(message: Message) {
-    return message.sender === "client";
+    return (
+      message.sender === "client" &&
+      Boolean(threadUserId) &&
+      message.userId === threadUserId
+    );
   }
 
   return (
@@ -52,7 +66,7 @@ export function MessagesPage() {
       <ChatFrame>
         <ProjectChat
           title={client?.company ?? "Project chat"}
-          subtitle="Project chat"
+          subtitle="Your conversation with Vitespace"
           clientAvatar={client?.avatar}
           messages={messages}
           outgoingSender="client"
