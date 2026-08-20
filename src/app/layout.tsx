@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   title: "Vitespace Portal",
   description:
     "Everything your agency is doing for you, in one place. Progress, communication, approvals, and billing.",
+  icons: {
+    icon: [{ url: "/logo.png", type: "image/png" }],
+    apple: [{ url: "/logo.png", type: "image/png" }],
+    shortcut: "/logo.png",
+  },
 };
 
 export const viewport = {
