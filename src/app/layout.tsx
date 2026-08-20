@@ -3,6 +3,7 @@ import { Geist_Mono } from "next/font/google";
 import { PortalProvider } from "@/lib/portal-store";
 import { ClientAuthProvider } from "@/lib/client-auth";
 import { AuthSessionSync } from "@/components/portal/portal-auth-guard";
+import { MessagesRealtime } from "@/components/messages/messages-realtime";
 import { portalFont } from "@/lib/fonts";
 import "./globals.css";
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <PortalProvider>
           <ClientAuthProvider>
             <AuthSessionSync />
+            <MessagesRealtime />
             {children}
           </ClientAuthProvider>
         </PortalProvider>

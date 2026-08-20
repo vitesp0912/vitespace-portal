@@ -1,15 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChatFrame, ProjectChat } from "@/components/messages/project-chat";
 import { useClientAuth } from "@/lib/client-auth";
+import { setActiveMessageThread } from "@/lib/message-thread-view";
 import { useClientPortal } from "@/lib/portal-store";
 import type { Message } from "@/types";
 
 export function MessagesPage() {
   const { session } = useClientAuth();
-  const { client, clientId, getMessagesForClient, addMessage, updateMessage } =
-    useClientPortal();
+  const {
+    client,
+    clientId,
+    getMessagesForClient,
+    addMessage,
+    updateMessage,
+    markThreadRead,
+  } = useClientPortal();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,6 +28,27 @@ export function MessagesPage() {
         : [],
     [clientId, threadUserId, getMessagesForClient]
   );
+
+  useEffect(() => {
+    if (!clientId || !threadUserId) {
+      setActiveMessageThread(null);
+      return;
+    }
+    setActiveMessageThread({
+      clientId,
+      threadUserId,
+      reader: "client",
+    });
+    void markThreadRead(clientId, threadUserId, "client");
+    return () => setActiveMessageThread(null);
+  }, [clientId, threadUserId, markThreadRead]);
+
+  // Re-mark when new messages arrive while viewing
+  const lastMessageId = messages[messages.length - 1]?.id;
+  useEffect(() => {
+    if (!clientId || !threadUserId || !lastMessageId) return;
+    void markThreadRead(clientId, threadUserId, "client");
+  }, [clientId, threadUserId, lastMessageId, markThreadRead]);
 
   async function handleSend(content: string) {
     if (!clientId || !threadUserId || sending) return false;

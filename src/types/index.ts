@@ -186,6 +186,14 @@ export interface Message {
   contextHref?: string;
 }
 
+/** Last-read cursor for a DM thread (client or Vitespace). */
+export interface MessageRead {
+  clientId: string;
+  threadUserId: string;
+  reader: "client" | "vitespace";
+  lastReadAt: string;
+}
+
 export interface RoadmapItem {
   id: string;
   clientId: string;

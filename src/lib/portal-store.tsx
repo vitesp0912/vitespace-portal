@@ -27,6 +27,7 @@ import type {
   Service,
   TaskStatus,
   WorkItem,
+  MessageRead,
 } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPortalSnapshot } from "@/lib/supabase/data";
@@ -43,6 +44,7 @@ export interface PortalState {
   invoices: Invoice[];
   documents: Document[];
   messages: Message[];
+  messageReads: MessageRead[];
   roadmapItems: RoadmapItem[];
   notifications: Notification[];
   activeClientId: string;
@@ -59,6 +61,7 @@ const EMPTY_STATE: PortalState = {
   invoices: [],
   documents: [],
   messages: [],
+  messageReads: [],
   roadmapItems: [],
   notifications: [],
   activeClientId: "",
@@ -219,6 +222,18 @@ type PortalContextValue = PortalState & {
   getInvoicesForClient: (clientId: string) => Invoice[];
   getDocumentsForClient: (clientId: string) => Document[];
   getMessagesForClient: (clientId: string, threadUserId?: string) => Message[];
+  getUnreadMessageCount: (
+    clientId: string,
+    reader: "client" | "vitespace",
+    threadUserId?: string
+  ) => number;
+  markThreadRead: (
+    clientId: string,
+    threadUserId: string,
+    reader: "client" | "vitespace"
+  ) => Promise<void>;
+  upsertRealtimeMessage: (message: Message) => void;
+  removeRealtimeMessage: (id: string) => void;
   getRoadmapForClient: (clientId: string) => RoadmapItem[];
   getNotificationsForClient: (clientId: string) => Notification[];
   getOverallProgress: (clientId: string) => number;
@@ -342,6 +357,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
           invoices: snapshot.invoices,
           documents: snapshot.documents,
           messages: snapshot.messages,
+          messageReads: snapshot.messageReads,
           notifications: snapshot.notifications,
           workItems: snapshot.tasks.map((t) =>
             taskToWorkItem(t, t.serviceName)
@@ -843,6 +859,109 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         ),
     [state.messages]
   );
+
+  const getUnreadMessageCount = useCallback(
+    (
+      clientId: string,
+      reader: "client" | "vitespace",
+      threadUserId?: string
+    ) => {
+      const incomingSender = reader === "client" ? "vitespace" : "client";
+      const threads = filterClient(state.messages, clientId).filter((m) =>
+        threadUserId ? m.userId === threadUserId : Boolean(m.userId)
+      );
+
+      let count = 0;
+      const threadIds = new Set(
+        threads
+          .map((m) => m.userId)
+          .filter((id): id is string => Boolean(id))
+      );
+
+      for (const tid of threadIds) {
+        const read = state.messageReads.find(
+          (r) =>
+            r.clientId === clientId &&
+            r.threadUserId === tid &&
+            r.reader === reader
+        );
+        const since = read ? new Date(read.lastReadAt).getTime() : Date.now();
+        count += threads.filter(
+          (m) =>
+            m.userId === tid &&
+            m.sender === incomingSender &&
+            new Date(m.timestamp).getTime() > since
+        ).length;
+      }
+      return count;
+    },
+    [state.messages, state.messageReads]
+  );
+
+  const markThreadRead = useCallback(
+    async (
+      clientId: string,
+      threadUserId: string,
+      reader: "client" | "vitespace"
+    ) => {
+      const lastReadAt = new Date().toISOString();
+      patch((s) => {
+        const without = s.messageReads.filter(
+          (r) =>
+            !(
+              r.clientId === clientId &&
+              r.threadUserId === threadUserId &&
+              r.reader === reader
+            )
+        );
+        return {
+          ...s,
+          messageReads: [
+            ...without,
+            { clientId, threadUserId, reader, lastReadAt },
+          ],
+        };
+      });
+
+      const supabase = createClient();
+      await supabase.from("message_reads").upsert(
+        {
+          client_id: clientId,
+          thread_user_id: threadUserId,
+          reader,
+          last_read_at: lastReadAt,
+        },
+        { onConflict: "client_id,thread_user_id,reader" }
+      );
+    },
+    [patch]
+  );
+
+  const upsertRealtimeMessage = useCallback(
+    (message: Message) => {
+      patch((s) => {
+        const idx = s.messages.findIndex((m) => m.id === message.id);
+        if (idx === -1) {
+          return { ...s, messages: [...s.messages, message] };
+        }
+        const next = s.messages.slice();
+        next[idx] = message;
+        return { ...s, messages: next };
+      });
+    },
+    [patch]
+  );
+
+  const removeRealtimeMessage = useCallback(
+    (id: string) => {
+      patch((s) => ({
+        ...s,
+        messages: s.messages.filter((m) => m.id !== id),
+      }));
+    },
+    [patch]
+  );
+
   const getRoadmapForClient = useCallback(
     (clientId: string) => filterClient(state.roadmapItems, clientId),
     [state.roadmapItems]
@@ -1341,6 +1460,10 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       getInvoicesForClient,
       getDocumentsForClient,
       getMessagesForClient,
+      getUnreadMessageCount,
+      markThreadRead,
+      upsertRealtimeMessage,
+      removeRealtimeMessage,
       getRoadmapForClient,
       getNotificationsForClient,
       getOverallProgress,
@@ -1407,6 +1530,10 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       getInvoicesForClient,
       getDocumentsForClient,
       getMessagesForClient,
+      getUnreadMessageCount,
+      markThreadRead,
+      upsertRealtimeMessage,
+      removeRealtimeMessage,
       getRoadmapForClient,
       getNotificationsForClient,
       getOverallProgress,

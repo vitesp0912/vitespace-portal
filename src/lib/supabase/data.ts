@@ -5,6 +5,7 @@ import type {
   Invoice,
   InvoiceStatus,
   Message,
+  MessageRead,
   Notification,
   Service,
 } from "@/types";
@@ -38,6 +39,7 @@ export type PortalSnapshot = {
   invoices: Invoice[];
   documents: Document[];
   messages: Message[];
+  messageReads: MessageRead[];
   notifications: Notification[];
   tasks: TaskRow[];
 };
@@ -114,6 +116,19 @@ function mapMessage(row: Record<string, unknown>): Message {
   };
 }
 
+export function mapMessageRow(row: Record<string, unknown>): Message {
+  return mapMessage(row);
+}
+
+function mapMessageRead(row: Record<string, unknown>): MessageRead {
+  return {
+    clientId: String(row.client_id),
+    threadUserId: String(row.thread_user_id),
+    reader: row.reader as MessageRead["reader"],
+    lastReadAt: String(row.last_read_at ?? new Date().toISOString()),
+  };
+}
+
 function mapNotification(row: Record<string, unknown>): Notification {
   return {
     id: String(row.id),
@@ -182,6 +197,7 @@ export async function fetchPortalSnapshot(
     invoicesRes,
     documentsRes,
     messagesRes,
+    messageReadsRes,
     notificationsRes,
     tasksRes,
   ] = await Promise.all([
@@ -190,6 +206,7 @@ export async function fetchPortalSnapshot(
     supabase.from("invoices").select("*").order("issued_at", { ascending: false }),
     supabase.from("documents").select("*").order("uploaded_at", { ascending: false }),
     supabase.from("messages").select("*").order("created_at", { ascending: true }),
+    supabase.from("message_reads").select("*"),
     supabase.from("notifications").select("*").order("created_at", { ascending: false }),
     supabase
       .from("tasks")
@@ -197,7 +214,7 @@ export async function fetchPortalSnapshot(
       .order("updated_at", { ascending: false }),
   ]);
 
-  const firstError =
+  const criticalError =
     clientsRes.error ||
     servicesRes.error ||
     invoicesRes.error ||
@@ -206,8 +223,8 @@ export async function fetchPortalSnapshot(
     notificationsRes.error ||
     tasksRes.error;
 
-  if (firstError) {
-    throw new Error(firstError.message);
+  if (criticalError) {
+    throw new Error(criticalError.message);
   }
 
   let notifications = (notificationsRes.data ?? []).map(mapNotification);
@@ -217,12 +234,17 @@ export async function fetchPortalSnapshot(
       .map(mapNotification);
   }
 
+  const messageReads = messageReadsRes.error
+    ? []
+    : (messageReadsRes.data ?? []).map(mapMessageRead);
+
   return {
     clients: (clientsRes.data ?? []).map(mapClient),
     services: (servicesRes.data ?? []).map(mapServiceRow),
     invoices: (invoicesRes.data ?? []).map(mapInvoice),
     documents: (documentsRes.data ?? []).map(mapDocument),
     messages: (messagesRes.data ?? []).map(mapMessage),
+    messageReads,
     notifications,
     tasks: (tasksRes.data ?? []).map(mapTask),
   };

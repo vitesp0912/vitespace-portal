@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChatFrame, ProjectChat } from "@/components/messages/project-chat";
+import { setActiveMessageThread } from "@/lib/message-thread-view";
 import { useAdminClient } from "@/lib/portal-store";
 import type { Message } from "@/types";
 
@@ -15,8 +16,13 @@ type PortalUser = {
 function MessagesManagerInner({ clientId }: { clientId: string }) {
   const searchParams = useSearchParams();
   const selectedUserId = searchParams.get("user") ?? "";
-  const { client, getMessagesForClient, addMessage, updateMessage } =
-    useAdminClient(clientId);
+  const {
+    client,
+    getMessagesForClient,
+    addMessage,
+    updateMessage,
+    markThreadRead,
+  } = useAdminClient(clientId);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
@@ -51,6 +57,27 @@ function MessagesManagerInner({ clientId }: { clientId: string }) {
         : [],
     [clientId, selectedUserId, getMessagesForClient]
   );
+
+  const lastMessageId = messages[messages.length - 1]?.id;
+
+  useEffect(() => {
+    if (!selectedUserId) {
+      setActiveMessageThread(null);
+      return;
+    }
+    setActiveMessageThread({
+      clientId,
+      threadUserId: selectedUserId,
+      reader: "vitespace",
+    });
+    void markThreadRead(clientId, selectedUserId, "vitespace");
+    return () => setActiveMessageThread(null);
+  }, [clientId, selectedUserId, markThreadRead]);
+
+  useEffect(() => {
+    if (!selectedUserId || !lastMessageId) return;
+    void markThreadRead(clientId, selectedUserId, "vitespace");
+  }, [clientId, selectedUserId, lastMessageId, markThreadRead]);
 
   async function handleSend(content: string) {
     if (!selectedUserId || sending) return false;

@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useClientAuth } from "@/lib/client-auth";
+import { formatUnreadBadge } from "@/lib/message-thread-view";
+import { usePortal } from "@/lib/portal-store";
 
 interface AdminShellProps {
   clientId?: string;
@@ -220,12 +222,16 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useClientAuth();
+  const { getUnreadMessageCount } = usePortal();
   const isClientView = Boolean(clientId);
   const clientTabs = clientId ? CLIENT_SECTIONS(clientId) : [];
   const messagesHref = clientId
     ? `/admin/clients/${clientId}/messages`
     : "";
   const isMessagesPage = Boolean(clientId && pathname === messagesHref);
+  const unreadLabel = clientId
+    ? formatUnreadBadge(getUnreadMessageCount(clientId, "vitespace"))
+    : null;
 
   function isActive(href: string, end?: boolean) {
     if (end) return pathname === href;
@@ -292,7 +298,12 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
                       )}
                     >
                       <Icon className={cn("h-4 w-4 shrink-0", active ? "text-brand" : "opacity-70")} />
-                      {tab.label}
+                      <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                      {isMessages && unreadLabel && (
+                        <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">
+                          {unreadLabel}
+                        </span>
+                      )}
                     </Link>
                     {isMessages && isMessagesPage && clientId && (
                       <div className="mt-1.5 mb-1 pl-3 pr-1">
@@ -355,6 +366,9 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
               {clientTabs.map((tab) => {
                 const Icon = tab.icon;
                 const active = isActive(tab.href, tab.end);
+                const isMessages = tab.href === messagesHref;
+                const showUnread = isMessages && unreadLabel;
+
                 return (
                   <Link
                     key={tab.href}
@@ -368,6 +382,11 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
                   >
                     <Icon className="h-3.5 w-3.5" />
                     {tab.label}
+                    {showUnread && (
+                      <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[9px] font-semibold text-white">
+                        {unreadLabel}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
