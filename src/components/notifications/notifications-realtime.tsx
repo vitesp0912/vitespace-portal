@@ -8,8 +8,8 @@ import { mapNotificationRow } from "@/lib/supabase/data";
 import { createClient } from "@/lib/supabase/client";
 
 /**
- * After login: live notifications for the bell (invoice alerts for owners, etc.).
- * RLS decides which rows each user receives over Realtime.
+ * After login: live notifications for the bell.
+ * RLS (audience + role) decides which rows each user receives over Realtime.
  */
 export function NotificationsRealtime() {
   const { session, hydrated, user } = useClientAuth();
@@ -18,7 +18,7 @@ export function NotificationsRealtime() {
   useEffect(() => {
     if (!hydrated || !session || !user) return;
 
-    // Admins manage notifications in the admin UI; bell + owner alerts are for portal users.
+    // Admins manage notifications in the admin UI; bell alerts are for portal users.
     if (session.isAdmin && !session.clientId) return;
 
     const supabase = createClient();

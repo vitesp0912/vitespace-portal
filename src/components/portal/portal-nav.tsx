@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageSquarePlus } from "lucide-react";
-import { portalNavItems } from "@/lib/portal-nav";
+import { getVisiblePortalNavItems } from "@/lib/client-access";
 import { formatUnreadBadge } from "@/lib/message-thread-view";
 import { useClientAuth } from "@/lib/client-auth";
 import { useClientPortal } from "@/lib/portal-store";
@@ -27,6 +27,7 @@ export function PortalNavDesktop() {
     clientId && session?.userId
       ? getUnreadMessageCount(clientId, "client", session.userId)
       : 0;
+  const navItems = getVisiblePortalNavItems(session);
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
@@ -44,7 +45,7 @@ export function PortalNavDesktop() {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pt-2">
-        {portalNavItems.map((item) => {
+        {navItems.map((item) => {
           const isActive =
             item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -103,7 +104,7 @@ export function PortalNavMobile() {
   const pathname = usePathname();
   const { session } = useClientAuth();
   const { clientId, getUnreadMessageCount } = useClientPortal();
-  const mobileItems = portalNavItems.filter((i) => i.mobile);
+  const mobileItems = getVisiblePortalNavItems(session).filter((i) => i.mobile);
   const unreadMessages =
     clientId && session?.userId
       ? getUnreadMessageCount(clientId, "client", session.userId)

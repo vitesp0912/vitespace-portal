@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   TrendingUp,
@@ -6,7 +8,8 @@ import {
   FolderOpen,
   MessageSquare,
 } from "lucide-react";
-import { quickLinks } from "@/lib/portal-nav";
+import { getVisibleQuickLinks } from "@/lib/client-access";
+import { useClientAuth } from "@/lib/client-auth";
 
 const iconMap = {
   "/progress": TrendingUp,
@@ -17,13 +20,16 @@ const iconMap = {
 };
 
 export function QuickLinks() {
+  const { session } = useClientAuth();
+  const links = getVisibleQuickLinks(session);
+
   return (
     <section>
       <h2 className="mb-4 text-[15px] font-semibold tracking-tight">
         Quick Links
       </h2>
       <div className="flex flex-wrap gap-2">
-        {quickLinks.map((link) => {
+        {links.map((link) => {
           const Icon = iconMap[link.href as keyof typeof iconMap] ?? FileText;
           return (
             <Link
