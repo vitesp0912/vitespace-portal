@@ -1143,9 +1143,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         dueAt: input.dueAt,
         status: input.status,
         paidAt: input.paidAt,
-        fileUrl: input.fileUrl,
-        fileName: input.fileName,
-        fileSize: input.fileSize,
+        fileUrl: input.fileUrl ?? undefined,
+        fileName: input.fileName ?? undefined,
+        fileSize: input.fileSize ?? undefined,
       };
       patch((s) => {
         const without = s.invoices.filter((i) => i.id !== inv.id);
@@ -1198,38 +1198,39 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       }
 
       const local = (data as { local?: Invoice }).local;
+      const clearFile = input.fileUrl === null;
+      const next: Invoice = {
+        ...existing,
+        number: local?.number ?? input.number ?? existing.number,
+        title: local?.title ?? input.title ?? existing.title,
+        amount: local?.amount ?? input.amount ?? existing.amount,
+        issuedAt: local?.issuedAt ?? input.issuedAt ?? existing.issuedAt,
+        dueAt:
+          input.dueAt !== undefined
+            ? input.dueAt
+            : local?.dueAt ?? existing.dueAt,
+        status: local?.status ?? input.status ?? existing.status,
+        paidAt: input.paidAt !== undefined ? input.paidAt : existing.paidAt,
+        fileUrl: clearFile
+          ? undefined
+          : local?.fileUrl ||
+            (input.fileUrl === undefined ? existing.fileUrl : input.fileUrl) ||
+            undefined,
+        fileName: clearFile
+          ? undefined
+          : local?.fileName ||
+            (input.fileName === undefined ? existing.fileName : input.fileName) ||
+            undefined,
+        fileSize: clearFile
+          ? undefined
+          : local?.fileSize ||
+            (input.fileSize === undefined ? existing.fileSize : input.fileSize) ||
+            undefined,
+      };
+
       patch((s) => ({
         ...s,
-        invoices: s.invoices.map((i) =>
-          i.id === id
-            ? {
-                ...i,
-                ...input,
-                ...(local
-                  ? {
-                      number: local.number,
-                      title: local.title,
-                      amount: local.amount,
-                      issuedAt: local.issuedAt,
-                      dueAt: local.dueAt,
-                      status: local.status,
-                      fileUrl: local.fileUrl || undefined,
-                      fileName: local.fileName || undefined,
-                      fileSize: local.fileSize || undefined,
-                    }
-                  : {}),
-                // Empty due date must clear in UI
-                dueAt:
-                  input.dueAt !== undefined
-                    ? input.dueAt
-                    : local?.dueAt ?? i.dueAt,
-                paidAt: input.paidAt !== undefined ? input.paidAt : i.paidAt,
-                ...(input.fileUrl === null
-                  ? { fileUrl: undefined, fileName: undefined, fileSize: undefined }
-                  : {}),
-              }
-            : i
-        ),
+        invoices: s.invoices.map((i) => (i.id === id ? next : i)),
       }));
       return { ok: true };
     },
