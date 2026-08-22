@@ -20,8 +20,10 @@ export function PortalHeader() {
   const { session, logout } = useClientAuth();
   const {
     client,
+    clientId,
     notifications,
     setActiveClientId,
+    markAllNotificationsRead,
   } = useClientPortal();
 
   if (!client) return null;
@@ -44,7 +46,14 @@ export function PortalHeader() {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
-        <NotificationDrawer notifications={notifications} />
+        <NotificationDrawer
+          notifications={notifications}
+          onOpenMarkAllRead={
+            clientId
+              ? () => markAllNotificationsRead(clientId)
+              : undefined
+          }
+        />
 
         <DropdownMenu>
           <DropdownMenuTrigger

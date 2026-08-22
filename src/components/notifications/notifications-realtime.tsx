@@ -40,6 +40,14 @@ export function NotificationsRealtime() {
           // Client portal only cares about recipient=client rows
           if (String(row.recipient) !== "client") return;
 
+          // Ignore other clients (admin preview / multi-tenant safety)
+          if (
+            session.clientId &&
+            String(row.client_id) !== session.clientId
+          ) {
+            return;
+          }
+
           const notification = mapNotificationRow(row);
           const isNew = payload.eventType === "INSERT";
           upsertRealtimeNotification(notification);
