@@ -4,16 +4,25 @@ import { useEffect } from "react";
 import { useClientAuth } from "@/lib/client-auth";
 import { playNotificationSound } from "@/lib/message-sound";
 import { usePortal } from "@/lib/portal-store";
-import { mapNotificationRow } from "@/lib/supabase/data";
+import {
+  mapNotificationReadRow,
+  mapNotificationRow,
+} from "@/lib/supabase/data";
 import { createClient } from "@/lib/supabase/client";
 
 /**
  * After login: live notifications for the bell.
- * RLS (audience + role) decides which rows each user receives over Realtime.
+ * Unread is per-user via notification_reads (not shared notifications.read).
+ * RLS (audience + role) decides which notification rows each user receives.
  */
 export function NotificationsRealtime() {
   const { session, hydrated, user } = useClientAuth();
-  const { upsertRealtimeNotification, removeRealtimeNotification } = usePortal();
+  const {
+    upsertRealtimeNotification,
+    upsertRealtimeNotificationRead,
+    removeRealtimeNotification,
+    getNotificationLastReadAt,
+  } = usePortal();
 
   useEffect(() => {
     if (!hydrated || !session || !user) return;
@@ -37,10 +46,8 @@ export function NotificationsRealtime() {
           const row = payload.new as Record<string, unknown> | null;
           if (!row) return;
 
-          // Client portal only cares about recipient=client rows
           if (String(row.recipient) !== "client") return;
 
-          // Ignore other clients (admin preview / multi-tenant safety)
           if (
             session.clientId &&
             String(row.client_id) !== session.clientId
@@ -52,9 +59,31 @@ export function NotificationsRealtime() {
           const isNew = payload.eventType === "INSERT";
           upsertRealtimeNotification(notification);
 
-          if (isNew && !notification.read) {
-            playNotificationSound();
+          if (isNew && session.clientId) {
+            const lastReadAt = getNotificationLastReadAt(
+              session.clientId,
+              session.userId
+            );
+            const since = lastReadAt ? new Date(lastReadAt).getTime() : 0;
+            if (new Date(notification.timestamp).getTime() > since) {
+              playNotificationSound();
+            }
           }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notification_reads",
+          filter: `user_id=eq.${session.userId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "DELETE") return;
+          const row = payload.new as Record<string, unknown> | null;
+          if (!row) return;
+          upsertRealtimeNotificationRead(mapNotificationReadRow(row));
         }
       )
       .subscribe();
@@ -69,7 +98,9 @@ export function NotificationsRealtime() {
     session?.clientId,
     user,
     upsertRealtimeNotification,
+    upsertRealtimeNotificationRead,
     removeRealtimeNotification,
+    getNotificationLastReadAt,
   ]);
 
   return null;

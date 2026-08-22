@@ -7,6 +7,7 @@ import type {
   Message,
   MessageRead,
   Notification,
+  NotificationRead,
   Service,
 } from "@/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -40,6 +41,7 @@ export type PortalSnapshot = {
   documents: Document[];
   messages: Message[];
   messageReads: MessageRead[];
+  notificationReads: NotificationRead[];
   notifications: Notification[];
   tasks: TaskRow[];
 };
@@ -149,6 +151,20 @@ export function mapNotificationRow(row: Record<string, unknown>): Notification {
   return mapNotification(row);
 }
 
+function mapNotificationRead(row: Record<string, unknown>): NotificationRead {
+  return {
+    clientId: String(row.client_id),
+    userId: String(row.user_id),
+    lastReadAt: String(row.last_read_at ?? new Date().toISOString()),
+  };
+}
+
+export function mapNotificationReadRow(
+  row: Record<string, unknown>
+): NotificationRead {
+  return mapNotificationRead(row);
+}
+
 function mapTask(row: Record<string, unknown>): TaskRow {
   const serviceJoin = row.services as Record<string, unknown> | null | undefined;
   return {
@@ -206,6 +222,7 @@ export async function fetchPortalSnapshot(
     documentsRes,
     messagesRes,
     messageReadsRes,
+    notificationReadsRes,
     notificationsRes,
     tasksRes,
   ] = await Promise.all([
@@ -215,6 +232,7 @@ export async function fetchPortalSnapshot(
     supabase.from("documents").select("*").order("uploaded_at", { ascending: false }),
     supabase.from("messages").select("*").order("created_at", { ascending: true }),
     supabase.from("message_reads").select("*"),
+    supabase.from("notification_reads").select("*"),
     supabase.from("notifications").select("*").order("created_at", { ascending: false }),
     supabase
       .from("tasks")
@@ -246,6 +264,10 @@ export async function fetchPortalSnapshot(
     ? []
     : (messageReadsRes.data ?? []).map(mapMessageRead);
 
+  const notificationReads = notificationReadsRes.error
+    ? []
+    : (notificationReadsRes.data ?? []).map(mapNotificationRead);
+
   return {
     clients: (clientsRes.data ?? []).map(mapClient),
     services: (servicesRes.data ?? []).map(mapServiceRow),
@@ -253,6 +275,7 @@ export async function fetchPortalSnapshot(
     documents: (documentsRes.data ?? []).map(mapDocument),
     messages: (messagesRes.data ?? []).map(mapMessage),
     messageReads,
+    notificationReads,
     notifications,
     tasks: (tasksRes.data ?? []).map(mapTask),
   };

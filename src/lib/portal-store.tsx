@@ -28,6 +28,7 @@ import type {
   TaskStatus,
   WorkItem,
   MessageRead,
+  NotificationRead,
 } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPortalSnapshot } from "@/lib/supabase/data";
@@ -45,6 +46,7 @@ export interface PortalState {
   documents: Document[];
   messages: Message[];
   messageReads: MessageRead[];
+  notificationReads: NotificationRead[];
   roadmapItems: RoadmapItem[];
   notifications: Notification[];
   activeClientId: string;
@@ -62,6 +64,7 @@ const EMPTY_STATE: PortalState = {
   documents: [],
   messages: [],
   messageReads: [],
+  notificationReads: [],
   roadmapItems: [],
   notifications: [],
   activeClientId: "",
@@ -237,6 +240,10 @@ type PortalContextValue = PortalState & {
   removeRealtimeMessage: (id: string) => void;
   getRoadmapForClient: (clientId: string) => RoadmapItem[];
   getNotificationsForClient: (clientId: string) => Notification[];
+  /** Client bell: notifications with per-user `read` derived from notification_reads. */
+  getNotificationsForUser: (clientId: string, userId: string) => Notification[];
+  getUnreadNotificationCount: (clientId: string, userId: string) => number;
+  getNotificationLastReadAt: (clientId: string, userId: string) => string | null;
   getOverallProgress: (clientId: string) => number;
   addClient: (
     input: ClientInput
@@ -321,8 +328,10 @@ type PortalContextValue = PortalState & {
   updateNotification: (id: string, input: Partial<NotificationInput>) => void;
   deleteNotification: (id: string) => void;
   markNotificationRead: (id: string, read?: boolean) => void;
-  markAllNotificationsRead: (clientId: string) => void;
+  /** Per-user cursor — does not flip shared notifications.read. */
+  markNotificationsReadForUser: (clientId: string, userId: string) => void;
   upsertRealtimeNotification: (notification: Notification) => void;
+  upsertRealtimeNotificationRead: (read: NotificationRead) => void;
   removeRealtimeNotification: (id: string) => void;
   upsertRealtimeDocument: (document: Document) => void;
   removeRealtimeDocument: (id: string) => void;
@@ -373,6 +382,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
           documents: snapshot.documents,
           messages: snapshot.messages,
           messageReads: snapshot.messageReads,
+          notificationReads: snapshot.notificationReads,
           notifications: snapshot.notifications,
           workItems: snapshot.tasks.map((t) =>
             taskToWorkItem(t, t.serviceName)
@@ -564,6 +574,8 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         invoices: s.invoices.filter((i) => i.clientId !== id),
         documents: s.documents.filter((i) => i.clientId !== id),
         messages: s.messages.filter((i) => i.clientId !== id),
+        messageReads: s.messageReads.filter((i) => i.clientId !== id),
+        notificationReads: s.notificationReads.filter((i) => i.clientId !== id),
         roadmapItems: s.roadmapItems.filter((i) => i.clientId !== id),
         notifications: s.notifications.filter((i) => i.clientId !== id),
         activeClientId: s.activeClientId === id ? "" : s.activeClientId,
@@ -987,6 +999,39 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       ),
     [state.notifications]
+  );
+
+  const getNotificationLastReadAt = useCallback(
+    (clientId: string, userId: string): string | null => {
+      const row = state.notificationReads.find(
+        (r) => r.clientId === clientId && r.userId === userId
+      );
+      return row?.lastReadAt ?? null;
+    },
+    [state.notificationReads]
+  );
+
+  const getNotificationsForUser = useCallback(
+    (clientId: string, userId: string) => {
+      const lastReadAt = getNotificationLastReadAt(clientId, userId);
+      const since = lastReadAt ? new Date(lastReadAt).getTime() : 0;
+      return getNotificationsForClient(clientId).map((n) => ({
+        ...n,
+        read: new Date(n.timestamp).getTime() <= since,
+      }));
+    },
+    [getNotificationsForClient, getNotificationLastReadAt]
+  );
+
+  const getUnreadNotificationCount = useCallback(
+    (clientId: string, userId: string) => {
+      const lastReadAt = getNotificationLastReadAt(clientId, userId);
+      const since = lastReadAt ? new Date(lastReadAt).getTime() : 0;
+      return getNotificationsForClient(clientId).filter(
+        (n) => new Date(n.timestamp).getTime() > since
+      ).length;
+    },
+    [getNotificationsForClient, getNotificationLastReadAt]
   );
 
   const addActionItem = useCallback(
@@ -1621,20 +1666,40 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     },
     [patch]
   );
-  const markAllNotificationsRead = useCallback(
-    (clientId: string) => {
-      patch((s) => ({
-        ...s,
-        notifications: s.notifications.map((n) =>
-          n.clientId === clientId ? { ...n, read: true } : n
-        ),
-      }));
-      void createClient()
-        .from("notifications")
-        .update({ read: true })
-        .eq("client_id", clientId);
+
+  const markNotificationsReadForUser = useCallback(
+    (clientId: string, userId: string) => {
+      // Cursor must be at/after every current notification timestamp so the badge
+      // reliably clears (avoids ms clock skew leaving items "unread").
+      const latestMs = filterClient(state.notifications, clientId).reduce(
+        (max, n) => Math.max(max, new Date(n.timestamp).getTime() || 0),
+        0
+      );
+      const lastReadAt = new Date(Math.max(Date.now(), latestMs)).toISOString();
+
+      patch((s) => {
+        const without = s.notificationReads.filter(
+          (r) => !(r.clientId === clientId && r.userId === userId)
+        );
+        return {
+          ...s,
+          notificationReads: [
+            ...without,
+            { clientId, userId, lastReadAt },
+          ],
+        };
+      });
+
+      void createClient().from("notification_reads").upsert(
+        {
+          client_id: clientId,
+          user_id: userId,
+          last_read_at: lastReadAt,
+        },
+        { onConflict: "client_id,user_id" }
+      );
     },
-    [patch]
+    [patch, state.notifications]
   );
 
   const upsertRealtimeNotification = useCallback(
@@ -1647,6 +1712,22 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         const next = s.notifications.slice();
         next[idx] = notification;
         return { ...s, notifications: next };
+      });
+    },
+    [patch]
+  );
+
+  const upsertRealtimeNotificationRead = useCallback(
+    (read: NotificationRead) => {
+      patch((s) => {
+        const without = s.notificationReads.filter(
+          (r) =>
+            !(r.clientId === read.clientId && r.userId === read.userId)
+        );
+        return {
+          ...s,
+          notificationReads: [...without, read],
+        };
       });
     },
     [patch]
@@ -1716,6 +1797,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       removeRealtimeMessage,
       getRoadmapForClient,
       getNotificationsForClient,
+      getNotificationsForUser,
+      getUnreadNotificationCount,
+      getNotificationLastReadAt,
       getOverallProgress,
       addClient,
       updateClient,
@@ -1758,8 +1842,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       updateNotification,
       deleteNotification,
       markNotificationRead,
-      markAllNotificationsRead,
+      markNotificationsReadForUser,
       upsertRealtimeNotification,
+      upsertRealtimeNotificationRead,
       removeRealtimeNotification,
       upsertRealtimeDocument,
       removeRealtimeDocument,
@@ -1790,6 +1875,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       removeRealtimeMessage,
       getRoadmapForClient,
       getNotificationsForClient,
+      getNotificationsForUser,
+      getUnreadNotificationCount,
+      getNotificationLastReadAt,
       getOverallProgress,
       addClient,
       updateClient,
@@ -1832,8 +1920,9 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       updateNotification,
       deleteNotification,
       markNotificationRead,
-      markAllNotificationsRead,
+      markNotificationsReadForUser,
       upsertRealtimeNotification,
+      upsertRealtimeNotificationRead,
       removeRealtimeNotification,
       upsertRealtimeDocument,
       removeRealtimeDocument,

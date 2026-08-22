@@ -194,6 +194,13 @@ export interface MessageRead {
   lastReadAt: string;
 }
 
+/** Per-user last-read cursor for client bell notifications. */
+export interface NotificationRead {
+  clientId: string;
+  userId: string;
+  lastReadAt: string;
+}
+
 export interface RoadmapItem {
   id: string;
   clientId: string;

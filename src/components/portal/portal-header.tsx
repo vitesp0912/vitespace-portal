@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,12 +22,20 @@ export function PortalHeader() {
   const {
     client,
     clientId,
-    notifications,
+    notificationReads,
     setActiveClientId,
-    markAllNotificationsRead,
+    getNotificationsForUser,
+    markNotificationsReadForUser,
   } = useClientPortal();
 
-  if (!client) return null;
+  const userId = session?.userId;
+
+  const notifications = useMemo(() => {
+    if (!clientId || !userId) return [];
+    return getNotificationsForUser(clientId, userId);
+  }, [clientId, userId, getNotificationsForUser, notificationReads]);
+
+  if (!client || !clientId) return null;
 
   async function handleSignOut() {
     await logout();
@@ -48,9 +57,9 @@ export function PortalHeader() {
       <div className="flex items-center gap-1 sm:gap-2">
         <NotificationDrawer
           notifications={notifications}
-          onOpenMarkAllRead={
-            clientId
-              ? () => markAllNotificationsRead(clientId)
+          onMarkAllRead={
+            userId
+              ? () => markNotificationsReadForUser(clientId, userId)
               : undefined
           }
         />

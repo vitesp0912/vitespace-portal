@@ -24,12 +24,12 @@ import type { Notification } from "@/types";
 
 type NotificationDrawerProps = {
   notifications: Notification[];
-  onOpenMarkAllRead?: () => void;
+  onMarkAllRead?: () => void;
 };
 
 export function NotificationDrawer({
   notifications,
-  onOpenMarkAllRead,
+  onMarkAllRead,
 }: NotificationDrawerProps) {
   const [open, setOpen] = useState(false);
 
@@ -44,12 +44,22 @@ export function NotificationDrawer({
     [notifications]
   );
 
+  function markAllRead() {
+    if (unreadCount > 0) onMarkAllRead?.();
+  }
+
   function handleOpenChange(next: boolean) {
-    // Mark read when closing so unread styling is visible while the drawer is open
-    if (!next && open && unreadCount > 0) {
-      onOpenMarkAllRead?.();
+    // Clear badge as soon as the drawer opens (per-user cursor).
+    // Also mark on close so Link navigation / late arrivals are covered.
+    if (next || open) {
+      markAllRead();
     }
     setOpen(next);
+  }
+
+  function handleClose() {
+    markAllRead();
+    setOpen(false);
   }
 
   return (
@@ -137,7 +147,7 @@ export function NotificationDrawer({
                       <NotificationItem
                         key={notification.id}
                         notification={notification}
-                        onSelect={() => setOpen(false)}
+                        onSelect={handleClose}
                       />
                     ))}
                   </ul>
