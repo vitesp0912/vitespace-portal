@@ -301,7 +301,9 @@ type PortalContextValue = PortalState & {
     id: string,
     input: Partial<DocumentInput>
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
-  deleteDocument: (id: string) => void;
+  deleteDocument: (
+    id: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   addMessage: (
     clientId: string,
     input: MessageInput,
@@ -1288,7 +1290,10 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         uploadedByEmail: input.uploadedByEmail,
         editedAt: input.editedAt,
       };
-      patch((s) => ({ ...s, documents: [doc, ...s.documents] }));
+      patch((s) => {
+        const without = s.documents.filter((d) => d.id !== doc.id);
+        return { ...s, documents: [doc, ...without] };
+      });
       return doc;
     },
     [patch]
@@ -1298,55 +1303,156 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       id: string,
       input: Partial<DocumentInput>
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const existing = state.documents.find((d) => d.id === id);
+      if (!existing) return { ok: false, error: "Document not found." };
+
       const editedAt =
-        input.description !== undefined ? new Date().toISOString() : undefined;
-      const row: Record<string, unknown> = {};
-      if (input.name !== undefined) {
-        row.name = input.name.trim();
-      }
-      if (input.description !== undefined) {
-        row.description = input.description;
-        row.edited_at = editedAt;
-      }
-      if (input.category !== undefined) row.category = input.category;
-      if (input.size !== undefined) row.file_size = input.size;
-      if (input.fileUrl !== undefined) row.file_url = input.fileUrl;
+        input.description !== undefined
+          ? new Date().toISOString()
+          : undefined;
 
-      if (Object.keys(row).length) {
-        const { error } = await createClient()
-          .from("documents")
-          .update(row)
-          .eq("id", id);
-        if (error) return { ok: false, error: error.message };
+      // Portal clients update their own docs via RLS; admin falls back to API if blocked.
+      {
+        const row: Record<string, unknown> = {};
+        if (input.name !== undefined) row.name = input.name.trim();
+        if (input.description !== undefined) {
+          row.description = input.description;
+          row.edited_at = editedAt;
+        }
+        if (input.category !== undefined) row.category = input.category;
+        if (input.size !== undefined && input.size !== "") {
+          row.file_size = input.size;
+        }
+        if (input.fileUrl !== undefined && input.fileUrl) {
+          row.file_url = input.fileUrl;
+        }
+        if (input.mimeType !== undefined && input.mimeType) {
+          row.mime_type = input.mimeType;
+        }
+
+        if (Object.keys(row).length) {
+          const { error } = await createClient()
+            .from("documents")
+            .update(row)
+            .eq("id", id);
+
+          if (!error) {
+            patch((s) => ({
+              ...s,
+              documents: s.documents.map((d) =>
+                d.id === id
+                  ? {
+                      ...d,
+                      ...input,
+                      name:
+                        input.name !== undefined
+                          ? input.name.trim()
+                          : d.name,
+                      description:
+                        input.description !== undefined
+                          ? input.description
+                          : d.description,
+                      fileUrl: input.fileUrl || d.fileUrl,
+                      mimeType: input.mimeType || d.mimeType,
+                      editedAt: editedAt ?? d.editedAt,
+                    }
+                  : d
+              ),
+            }));
+            return { ok: true };
+          }
+          // Fall through to admin API if RLS blocked (typical for Vitespace admin)
+        }
       }
 
+      const payload: Record<string, unknown> = {};
+      if (input.name !== undefined) payload.name = input.name;
+      if (input.description !== undefined) payload.description = input.description;
+      if (input.category !== undefined) payload.category = input.category;
+      if (input.size !== undefined && input.size !== "") payload.size = input.size;
+      if (input.fileUrl) payload.fileUrl = input.fileUrl;
+      if (input.mimeType) payload.mimeType = input.mimeType;
+
+      const res = await fetch(
+        `/api/clients/${existing.clientId}/documents/${id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          ok: false,
+          error:
+            (data as { error?: string }).error || "Failed to update document.",
+        };
+      }
+
+      const local = (data as { local?: Document }).local;
       patch((s) => ({
         ...s,
         documents: s.documents.map((d) =>
           d.id === id
             ? {
                 ...d,
-                ...input,
-                name: input.name !== undefined ? input.name.trim() : d.name,
-                description:
-                  input.description !== undefined
-                    ? input.description
-                    : d.description,
-                editedAt: editedAt ?? d.editedAt,
+                ...(local
+                  ? {
+                      name: local.name,
+                      description: local.description,
+                      category: local.category,
+                      size: local.size,
+                      fileUrl: local.fileUrl,
+                      mimeType: local.mimeType,
+                      editedAt: local.editedAt ?? d.editedAt,
+                    }
+                  : {
+                      ...input,
+                      name:
+                        input.name !== undefined
+                          ? input.name.trim()
+                          : d.name,
+                      fileUrl: input.fileUrl || d.fileUrl,
+                      mimeType: input.mimeType || d.mimeType,
+                      editedAt: editedAt ?? d.editedAt,
+                    }),
               }
             : d
         ),
       }));
       return { ok: true };
     },
-    [patch]
+    [patch, state.documents]
   );
   const deleteDocument = useCallback(
-    (id: string) => {
-      patch((s) => ({ ...s, documents: s.documents.filter((d) => d.id !== id) }));
-      void createClient().from("documents").delete().eq("id", id);
+    async (
+      id: string
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const existing = state.documents.find((d) => d.id === id);
+      if (!existing) return { ok: false, error: "Document not found." };
+
+      const res = await fetch(
+        `/api/clients/${existing.clientId}/documents/${id}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          ok: false,
+          error:
+            (data as { error?: string }).error || "Failed to delete document.",
+        };
+      }
+
+      patch((s) => ({
+        ...s,
+        documents: s.documents.filter((d) => d.id !== id),
+        notifications: s.notifications.filter((n) => n.id !== `n_doc_${id}`),
+      }));
+      return { ok: true };
     },
-    [patch]
+    [patch, state.documents]
   );
 
   const addMessage = useCallback(

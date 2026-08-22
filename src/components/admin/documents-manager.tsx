@@ -33,7 +33,9 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Document | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -64,13 +66,16 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
   async function handleSubmit() {
     setError(null);
 
+    // Edit metadata only (optional new file replaces existing via upload)
     if (editing && !file) {
       if (!form.name.trim()) return;
+      setUploading(true);
       const result = await updateDocument(editing.id, {
         name: form.name,
         description: form.description.trim(),
         category: form.category,
       });
+      setUploading(false);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -93,6 +98,7 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
       body.set("description", form.description.trim());
       body.set("category", form.category);
       body.set("uploadedBy", "vitespace");
+      if (editing?.id) body.set("documentId", editing.id);
       if (client?.company) body.set("company", client.company);
 
       const res = await fetch(`/api/clients/${clientId}/upload`, {
@@ -132,7 +138,7 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
       };
 
       if (editing && local.id !== editing.id) {
-        deleteDocument(editing.id);
+        await deleteDocument(editing.id);
       }
       addDocument(clientId, payload);
       setOpen(false);
@@ -143,6 +149,14 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
     }
   }
 
+  async function handleDelete(id: string) {
+    setListError(null);
+    setBusyId(id);
+    const result = await deleteDocument(id);
+    setBusyId(null);
+    if (!result.ok) setListError(result.error);
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
@@ -151,6 +165,7 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
           Add Document
         </Button>
       </div>
+      {listError && <p className="text-[13px] text-red-600">{listError}</p>}
       <ul className="divide-y divide-border/60 rounded-2xl bg-card ring-1 ring-border/80">
         {documents.length === 0 ? (
           <li className="px-5 py-10 text-center text-[13px] text-muted-foreground">
@@ -170,8 +185,8 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
                   </p>
                 )}
                 <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  {DOCUMENT_CATEGORY_LABELS[doc.category]} · {doc.size} ·{" "}
-                  {formatDate(doc.uploadedAt)}
+                  {DOCUMENT_CATEGORY_LABELS[doc.category]}
+                  {doc.size ? ` · ${doc.size}` : ""} · {formatDate(doc.uploadedAt)}
                   {doc.uploadedByEmail ? ` · ${doc.uploadedByEmail}` : ""}
                 </p>
               </div>
@@ -182,6 +197,7 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
                     size="icon-sm"
                     className="rounded-full"
                     title="Open file"
+                    disabled={busyId === doc.id}
                     onClick={() =>
                       window.open(doc.fileUrl, "_blank", "noopener,noreferrer")
                     }
@@ -193,6 +209,7 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
                   variant="ghost"
                   size="icon-sm"
                   className="rounded-full"
+                  disabled={busyId === doc.id}
                   onClick={() => openEdit(doc)}
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -201,9 +218,14 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
                   variant="ghost"
                   size="icon-sm"
                   className="rounded-full"
-                  onClick={() => deleteDocument(doc.id)}
+                  disabled={busyId === doc.id}
+                  onClick={() => void handleDelete(doc.id)}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  {busyId === doc.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
                 </Button>
               </div>
             </li>
@@ -240,7 +262,7 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
                   document.getElementById("document-file-input")?.click()
                 }
               >
-                Choose file
+                {editing ? "Replace file" : "Choose file"}
               </Button>
               <p
                 className="max-w-full overflow-hidden break-all text-[13px] text-muted-foreground"
@@ -249,7 +271,9 @@ export function DocumentsManager({ clientId }: { clientId: string }) {
                 {file
                   ? file.name
                   : editing
-                    ? "Keep current file, or choose a new one"
+                    ? editing.fileUrl
+                      ? `Current file kept — choose a file to replace it`
+                      : "No file on this document"
                     : "No file chosen"}
               </p>
             </div>

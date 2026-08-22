@@ -6,6 +6,7 @@ import {
   formatFileSize,
   safeFileName,
   uploadToR2,
+  deleteReplacedR2Object,
   type R2FolderKind,
 } from "@/lib/r2";
 
@@ -214,12 +215,15 @@ export async function POST(request: Request, context: RouteContext) {
 
       const { data: existing } = await supabase
         .from("invoices")
-        .select("id")
+        .select("id, file_url")
         .eq("client_id", clientId)
         .eq("number", number)
         .maybeSingle();
 
       const id = existing?.id ?? `inv_${Date.now()}`;
+      const previousFileUrl = existing?.file_url
+        ? String(existing.file_url)
+        : null;
 
       const row = {
         id,
@@ -250,6 +254,12 @@ export async function POST(request: Request, context: RouteContext) {
           },
           { status: 502 }
         );
+      }
+
+      try {
+        await deleteReplacedR2Object(previousFileUrl, key);
+      } catch (r2Err) {
+        console.error("Failed to delete previous invoice file from R2:", r2Err);
       }
 
       return NextResponse.json({
@@ -289,14 +299,35 @@ export async function POST(request: Request, context: RouteContext) {
     const mimeType = file.type || null;
 
     let id = `doc_${Date.now()}`;
+    let previousFileUrl: string | null = null;
+    const documentIdForm = String(form.get("documentId") || "").trim();
     if (asLogo) {
       const { data: existingLogo } = await supabase
         .from("documents")
-        .select("id")
+        .select("id, file_url")
         .eq("client_id", clientId)
         .eq("name", "Logo")
         .maybeSingle();
-      if (existingLogo?.id) id = String(existingLogo.id);
+      if (existingLogo?.id) {
+        id = String(existingLogo.id);
+        previousFileUrl = existingLogo.file_url
+          ? String(existingLogo.file_url)
+          : null;
+      }
+    } else if (documentIdForm && isAdmin) {
+      // Admin replacing file on an existing document — keep same row id
+      const { data: existingDoc } = await supabase
+        .from("documents")
+        .select("id, file_url")
+        .eq("id", documentIdForm)
+        .eq("client_id", clientId)
+        .maybeSingle();
+      if (existingDoc?.id) {
+        id = String(existingDoc.id);
+        previousFileUrl = existingDoc.file_url
+          ? String(existingDoc.file_url)
+          : null;
+      }
     }
 
     const uploadedByEmail = user.email?.trim() || null;
@@ -330,6 +361,12 @@ export async function POST(request: Request, context: RouteContext) {
         },
         { status: 502 }
       );
+    }
+
+    try {
+      await deleteReplacedR2Object(previousFileUrl, key);
+    } catch (r2Err) {
+      console.error("Failed to delete previous document file from R2:", r2Err);
     }
 
     const avatarUrl = asLogo ? `${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}` : null;

@@ -7,7 +7,7 @@ import { deleteFromR2ByPublicUrl } from "@/lib/r2";
 export const runtime = "nodejs";
 
 type RouteContext = {
-  params: Promise<{ id: string; invoiceId: string }>;
+  params: Promise<{ id: string; documentId: string }>;
 };
 
 async function requireAdmin() {
@@ -30,7 +30,7 @@ async function requireAdmin() {
   if (!isAdmin) {
     return {
       error: NextResponse.json(
-        { error: "Only Vitespace admin can manage invoices." },
+        { error: "Only Vitespace admin can manage documents." },
         { status: 403 }
       ),
     };
@@ -40,54 +40,37 @@ async function requireAdmin() {
 }
 
 /**
- * PATCH /api/clients/[id]/invoices/[invoiceId]
- * Admin-only metadata update (service role — same trust model as upload).
+ * PATCH /api/clients/[id]/documents/[documentId]
+ * Admin-only metadata update (service role).
  */
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     const gate = await requireAdmin();
     if ("error" in gate && gate.error) return gate.error;
 
-    const { id: clientId, invoiceId } = await context.params;
+    const { id: clientId, documentId } = await context.params;
     const body = (await request.json()) as Record<string, unknown>;
 
     const row: Record<string, unknown> = {};
-    if (body.number !== undefined) row.number = String(body.number).trim();
-    if (body.title !== undefined) row.title = String(body.title).trim();
-    if (body.amount !== undefined) row.amount = Number(body.amount) || 0;
-    if (body.issuedAt !== undefined) {
-      const issued = String(body.issuedAt).trim();
-      if (issued) row.issued_at = issued;
+    if (body.name !== undefined) row.name = String(body.name).trim();
+    if (body.description !== undefined) {
+      const desc = String(body.description).trim();
+      row.description = desc || null;
+      row.edited_at = new Date().toISOString();
     }
-    if (body.dueAt !== undefined) {
-      const due = String(body.dueAt).trim();
-      row.due_at = due || null;
+    if (body.category !== undefined) row.category = String(body.category).trim();
+    if (body.fileUrl !== undefined && body.fileUrl !== null && body.fileUrl !== "") {
+      row.file_url = body.fileUrl;
     }
-    if (body.status !== undefined) row.status = String(body.status).trim();
-
-    const clearFile = body.clearFile === true;
-    if (clearFile) {
-      row.file_url = null;
-      row.file_name = null;
-      row.file_size = null;
-      row.uploaded_at = null;
-    } else {
-      if (body.fileUrl !== undefined) {
-        row.file_url =
-          body.fileUrl === null || body.fileUrl === "" ? null : body.fileUrl;
-      }
-      if (body.fileName !== undefined) {
-        row.file_name =
-          body.fileName === null || body.fileName === ""
-            ? null
-            : body.fileName;
-      }
-      if (body.fileSize !== undefined) {
-        row.file_size =
-          body.fileSize === null || body.fileSize === ""
-            ? null
-            : body.fileSize;
-      }
+    if (body.size !== undefined && body.size !== null && body.size !== "") {
+      row.file_size = body.size;
+    }
+    if (
+      body.mimeType !== undefined &&
+      body.mimeType !== null &&
+      body.mimeType !== ""
+    ) {
+      row.mime_type = body.mimeType;
     }
 
     if (Object.keys(row).length === 0) {
@@ -95,22 +78,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const supabase = getSupabaseAdmin();
-
-    let previousFileUrl: string | null = null;
-    if (clearFile) {
-      const { data: existing } = await supabase
-        .from("invoices")
-        .select("file_url")
-        .eq("id", invoiceId)
-        .eq("client_id", clientId)
-        .maybeSingle();
-      previousFileUrl = existing?.file_url ? String(existing.file_url) : null;
-    }
-
     const { data, error } = await supabase
-      .from("invoices")
+      .from("documents")
       .update(row)
-      .eq("id", invoiceId)
+      .eq("id", documentId)
       .eq("client_id", clientId)
       .select()
       .maybeSingle();
@@ -119,15 +90,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
     if (!data) {
-      return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
-    }
-
-    if (clearFile && previousFileUrl) {
-      try {
-        await deleteFromR2ByPublicUrl(previousFileUrl);
-      } catch (r2Err) {
-        console.error("Failed to delete cleared invoice file from R2:", r2Err);
-      }
+      return NextResponse.json({ error: "Document not found." }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -135,15 +98,17 @@ export async function PATCH(request: Request, context: RouteContext) {
       local: {
         id: data.id,
         clientId: data.client_id,
-        number: data.number,
-        title: data.title,
-        amount: data.amount,
-        issuedAt: data.issued_at,
-        dueAt: data.due_at ?? "",
-        status: data.status,
-        fileUrl: data.file_url,
-        fileName: data.file_name,
-        fileSize: data.file_size,
+        name: data.name,
+        description: data.description ?? undefined,
+        category: data.category || "project_documents",
+        uploadedAt: String(data.uploaded_at ?? "").split("T")[0],
+        size: data.file_size ?? "",
+        fileUrl: data.file_url ?? undefined,
+        mimeType: data.mime_type ?? undefined,
+        uploadedBy: data.uploaded_by,
+        uploadedByUserId: data.uploaded_by_user_id ?? undefined,
+        uploadedByEmail: data.uploaded_by_email ?? undefined,
+        editedAt: data.edited_at ?? undefined,
       },
     });
   } catch (e) {
@@ -155,7 +120,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 /**
- * DELETE /api/clients/[id]/invoices/[invoiceId]
+ * DELETE /api/clients/[id]/documents/[documentId]
  * Admin-only delete (service role) — also removes the R2 object.
  */
 export async function DELETE(_request: Request, context: RouteContext) {
@@ -163,13 +128,13 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const gate = await requireAdmin();
     if ("error" in gate && gate.error) return gate.error;
 
-    const { id: clientId, invoiceId } = await context.params;
+    const { id: clientId, documentId } = await context.params;
     const supabase = getSupabaseAdmin();
 
     const { data: existing, error: fetchError } = await supabase
-      .from("invoices")
+      .from("documents")
       .select("id, file_url")
-      .eq("id", invoiceId)
+      .eq("id", documentId)
       .eq("client_id", clientId)
       .maybeSingle();
 
@@ -177,28 +142,28 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: fetchError.message }, { status: 502 });
     }
     if (!existing) {
-      return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
+      return NextResponse.json({ error: "Document not found." }, { status: 404 });
     }
 
     const fileUrl = existing.file_url ? String(existing.file_url) : null;
 
     const { error } = await supabase
-      .from("invoices")
+      .from("documents")
       .delete()
-      .eq("id", invoiceId)
+      .eq("id", documentId)
       .eq("client_id", clientId);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
 
-    await supabase.from("notifications").delete().eq("id", `n_inv_${invoiceId}`);
+    await supabase.from("notifications").delete().eq("id", `n_doc_${documentId}`);
 
     if (fileUrl) {
       try {
         await deleteFromR2ByPublicUrl(fileUrl);
       } catch (r2Err) {
-        console.error("Failed to delete invoice file from R2:", r2Err);
+        console.error("Failed to delete document file from R2:", r2Err);
       }
     }
 
