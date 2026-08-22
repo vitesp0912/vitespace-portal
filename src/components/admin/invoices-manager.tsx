@@ -32,8 +32,12 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  /** When editing: existing attachment kept unless user removes it */
+  const [existingFileName, setExistingFileName] = useState<string | null>(null);
   const [form, setForm] = useState({
     number: "",
     title: "",
@@ -46,6 +50,7 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
   function openCreate() {
     setEditing(null);
     setFile(null);
+    setExistingFileName(null);
     setError(null);
     setForm({
       number: "",
@@ -61,6 +66,7 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
   function openEdit(inv: Invoice) {
     setEditing(inv);
     setFile(null);
+    setExistingFileName(inv.fileName ?? (inv.fileUrl ? "Attached file" : null));
     setError(null);
     setForm({
       number: inv.number,
@@ -73,20 +79,41 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
     setOpen(true);
   }
 
+  function clearAttachment() {
+    setFile(null);
+    setExistingFileName(null);
+    const input = document.getElementById(
+      "invoice-file-input"
+    ) as HTMLInputElement | null;
+    if (input) input.value = "";
+  }
+
   async function handleSubmit() {
     if (!form.number.trim() || !form.title.trim()) return;
     setError(null);
 
-    // Edit metadata only (optional new file upload replaces R2 object + DB row)
+    // Edit without uploading a new file (may clear or keep existing)
     if (editing && !file) {
-      updateInvoice(editing.id, {
+      const hadFile = Boolean(editing.fileUrl || editing.fileName);
+      const removedFile = hadFile && !existingFileName;
+
+      setUploading(true);
+      const result = await updateInvoice(editing.id, {
         number: form.number,
         title: form.title,
         amount: Number(form.amount) || 0,
         issuedAt: form.issuedAt,
         dueAt: form.dueAt,
         status: form.status,
+        ...(removedFile
+          ? { fileUrl: null, fileName: null, fileSize: null }
+          : {}),
       });
+      setUploading(false);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       setOpen(false);
       return;
     }
@@ -134,7 +161,7 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
       if (editing) {
         // Upload upserts by invoice number — prefer API id so local matches DB
         if (local.id !== editing.id) {
-          deleteInvoice(editing.id);
+          await deleteInvoice(editing.id);
         }
         addInvoice(clientId, {
           id: local.id,
@@ -170,6 +197,22 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
     }
   }
 
+  async function handleDelete(id: string) {
+    setListError(null);
+    setBusyId(id);
+    const result = await deleteInvoice(id);
+    setBusyId(null);
+    if (!result.ok) setListError(result.error);
+  }
+
+  async function handleMarkPaid(id: string) {
+    setListError(null);
+    setBusyId(id);
+    const result = await markInvoicePaid(id);
+    setBusyId(null);
+    if (!result.ok) setListError(result.error);
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
@@ -178,6 +221,9 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
           Add Invoice
         </Button>
       </div>
+      {listError && (
+        <p className="text-[13px] text-red-600">{listError}</p>
+      )}
       <ul className="divide-y divide-border/60 rounded-2xl bg-card ring-1 ring-border/80">
         {invoices.length === 0 ? (
           <li className="px-5 py-10 text-center text-[13px] text-muted-foreground">
@@ -220,9 +266,14 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
                   variant="outline"
                   size="sm"
                   className="rounded-full"
-                  onClick={() => markInvoicePaid(inv.id)}
+                  disabled={busyId === inv.id}
+                  onClick={() => void handleMarkPaid(inv.id)}
                 >
-                  <CheckCircle className="mr-1 h-3.5 w-3.5" />
+                  {busyId === inv.id ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle className="mr-1 h-3.5 w-3.5" />
+                  )}
                   Mark Paid
                 </Button>
               )}
@@ -230,6 +281,7 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
                 variant="ghost"
                 size="icon-sm"
                 className="rounded-full"
+                disabled={busyId === inv.id}
                 onClick={() => openEdit(inv)}
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -238,7 +290,8 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
                 variant="ghost"
                 size="icon-sm"
                 className="rounded-full"
-                onClick={() => deleteInvoice(inv.id)}
+                disabled={busyId === inv.id}
+                onClick={() => void handleDelete(inv.id)}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -325,28 +378,47 @@ export function InvoicesManager({ clientId }: { clientId: string }) {
                 className="sr-only"
                 id="invoice-file-input"
                 disabled={uploading}
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const next = e.target.files?.[0] ?? null;
+                  setFile(next);
+                  if (next) setExistingFileName(null);
+                }}
               />
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                disabled={uploading}
-                onClick={() =>
-                  document.getElementById("invoice-file-input")?.click()
-                }
-              >
-                Choose file
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={uploading}
+                  onClick={() =>
+                    document.getElementById("invoice-file-input")?.click()
+                  }
+                >
+                  {file || existingFileName ? "Replace file" : "Choose file"}
+                </Button>
+                {(file || existingFileName) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="rounded-full text-muted-foreground hover:text-destructive"
+                    disabled={uploading}
+                    onClick={clearAttachment}
+                  >
+                    Remove file
+                  </Button>
+                )}
+              </div>
               <p
                 className="max-w-full overflow-hidden break-all text-[13px] text-muted-foreground"
-                title={file?.name}
+                title={file?.name ?? existingFileName ?? undefined}
               >
                 {file
                   ? file.name
-                  : editing?.fileName
-                    ? `Current: ${editing.fileName}`
-                    : "No file chosen"}
+                  : existingFileName
+                    ? `Current: ${existingFileName}`
+                    : editing
+                      ? "No file attached"
+                      : "No file chosen"}
               </p>
             </div>
             {error && <p className="text-[13px] text-red-600">{error}</p>}

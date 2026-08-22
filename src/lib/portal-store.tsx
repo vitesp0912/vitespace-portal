@@ -160,9 +160,10 @@ export interface InvoiceInput {
   dueAt: string;
   status: InvoiceStatus;
   paidAt?: string;
-  fileUrl?: string;
-  fileName?: string;
-  fileSize?: string;
+  /** Pass null to clear the attached file */
+  fileUrl?: string | null;
+  fileName?: string | null;
+  fileSize?: string | null;
 }
 
 export interface DocumentInput {
@@ -284,9 +285,17 @@ type PortalContextValue = PortalState & {
   deleteApproval: (id: string) => void;
   respondToApproval: (id: string, status: ApprovalStatus) => void;
   addInvoice: (clientId: string, input: InvoiceInput) => Invoice;
-  updateInvoice: (id: string, input: Partial<InvoiceInput>) => void;
-  deleteInvoice: (id: string) => void;
-  markInvoicePaid: (id: string, paidAt?: string) => void;
+  updateInvoice: (
+    id: string,
+    input: Partial<InvoiceInput>
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  deleteInvoice: (
+    id: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  markInvoicePaid: (
+    id: string,
+    paidAt?: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   addDocument: (clientId: string, input: DocumentInput) => Document;
   updateDocument: (
     id: string,
@@ -1145,38 +1154,118 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     [patch]
   );
   const updateInvoice = useCallback(
-    (id: string, input: Partial<InvoiceInput>) => {
+    async (
+      id: string,
+      input: Partial<InvoiceInput>
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const existing = state.invoices.find((i) => i.id === id);
+      if (!existing) return { ok: false, error: "Invoice not found." };
+
+      const payload: Record<string, unknown> = {};
+      if (input.number !== undefined) payload.number = input.number;
+      if (input.title !== undefined) payload.title = input.title;
+      if (input.amount !== undefined) payload.amount = input.amount;
+      if (input.issuedAt !== undefined) payload.issuedAt = input.issuedAt;
+      if (input.dueAt !== undefined) payload.dueAt = input.dueAt;
+      if (input.status !== undefined) payload.status = input.status;
+      if (input.fileUrl !== undefined) payload.fileUrl = input.fileUrl;
+      if (input.fileName !== undefined) payload.fileName = input.fileName;
+      if (input.fileSize !== undefined) payload.fileSize = input.fileSize;
+      if (
+        input.fileUrl === null &&
+        input.fileName === null &&
+        input.fileSize === null
+      ) {
+        payload.clearFile = true;
+      }
+
+      const res = await fetch(
+        `/api/clients/${existing.clientId}/invoices/${id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: (data as { error?: string }).error || "Failed to update invoice.",
+        };
+      }
+
+      const local = (data as { local?: Invoice }).local;
       patch((s) => ({
         ...s,
-        invoices: s.invoices.map((i) => (i.id === id ? { ...i, ...input } : i)),
+        invoices: s.invoices.map((i) =>
+          i.id === id
+            ? {
+                ...i,
+                ...input,
+                ...(local
+                  ? {
+                      number: local.number,
+                      title: local.title,
+                      amount: local.amount,
+                      issuedAt: local.issuedAt,
+                      dueAt: local.dueAt,
+                      status: local.status,
+                      fileUrl: local.fileUrl || undefined,
+                      fileName: local.fileName || undefined,
+                      fileSize: local.fileSize || undefined,
+                    }
+                  : {}),
+                // Empty due date must clear in UI
+                dueAt:
+                  input.dueAt !== undefined
+                    ? input.dueAt
+                    : local?.dueAt ?? i.dueAt,
+                paidAt: input.paidAt !== undefined ? input.paidAt : i.paidAt,
+                ...(input.fileUrl === null
+                  ? { fileUrl: undefined, fileName: undefined, fileSize: undefined }
+                  : {}),
+              }
+            : i
+        ),
       }));
-      const row: Record<string, unknown> = {};
-      if (input.number !== undefined) row.number = input.number;
-      if (input.title !== undefined) row.title = input.title;
-      if (input.amount !== undefined) row.amount = input.amount;
-      if (input.issuedAt !== undefined) row.issued_at = input.issuedAt;
-      if (input.dueAt !== undefined) row.due_at = input.dueAt;
-      if (input.status !== undefined) row.status = input.status;
-      if (input.fileUrl !== undefined) row.file_url = input.fileUrl;
-      if (input.fileName !== undefined) row.file_name = input.fileName;
-      if (input.fileSize !== undefined) row.file_size = input.fileSize;
-      if (Object.keys(row).length) {
-        void createClient().from("invoices").update(row).eq("id", id);
-      }
+      return { ok: true };
     },
-    [patch]
+    [patch, state.invoices]
   );
   const deleteInvoice = useCallback(
-    (id: string) => {
-      patch((s) => ({ ...s, invoices: s.invoices.filter((i) => i.id !== id) }));
-      void createClient().from("invoices").delete().eq("id", id);
+    async (
+      id: string
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const existing = state.invoices.find((i) => i.id === id);
+      if (!existing) return { ok: false, error: "Invoice not found." };
+
+      const res = await fetch(
+        `/api/clients/${existing.clientId}/invoices/${id}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: (data as { error?: string }).error || "Failed to delete invoice.",
+        };
+      }
+
+      patch((s) => ({
+        ...s,
+        invoices: s.invoices.filter((i) => i.id !== id),
+        notifications: s.notifications.filter((n) => n.id !== `n_inv_${id}`),
+      }));
+      return { ok: true };
     },
-    [patch]
+    [patch, state.invoices]
   );
   const markInvoicePaid = useCallback(
-    (id: string, _paidAt?: string) => {
-      updateInvoice(id, {
+    async (id: string, paidAt?: string) => {
+      return updateInvoice(id, {
         status: "paid",
+        paidAt: paidAt || new Date().toISOString().split("T")[0],
       });
     },
     [updateInvoice]
