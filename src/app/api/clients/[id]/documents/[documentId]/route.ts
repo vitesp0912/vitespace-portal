@@ -10,7 +10,7 @@ type RouteContext = {
   params: Promise<{ id: string; documentId: string }>;
 };
 
-async function requireAdmin() {
+async function requireUser() {
   const authClient = await createServerSupabase();
   const {
     data: { user },
@@ -27,7 +27,13 @@ async function requireAdmin() {
     .maybeSingle();
 
   const isAdmin = Boolean(adminRow) || isAdminEmail(user.email);
-  if (!isAdmin) {
+  return { user, isAdmin, authClient };
+}
+
+async function requireAdmin() {
+  const gate = await requireUser();
+  if ("error" in gate && gate.error) return gate;
+  if (!gate.isAdmin) {
     return {
       error: NextResponse.json(
         { error: "Only Vitespace admin can manage documents." },
@@ -35,8 +41,7 @@ async function requireAdmin() {
       ),
     };
   }
-
-  return { user };
+  return gate;
 }
 
 /**
@@ -121,11 +126,12 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 /**
  * DELETE /api/clients/[id]/documents/[documentId]
- * Admin-only delete (service role) — also removes the R2 object.
+ * Admin can delete any; portal users can delete only their own uploads.
+ * Also removes the R2 object.
  */
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
-    const gate = await requireAdmin();
+    const gate = await requireUser();
     if ("error" in gate && gate.error) return gate.error;
 
     const { id: clientId, documentId } = await context.params;
@@ -133,7 +139,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     const { data: existing, error: fetchError } = await supabase
       .from("documents")
-      .select("id, file_url")
+      .select("id, file_url, uploaded_by_user_id, client_id")
       .eq("id", documentId)
       .eq("client_id", clientId)
       .maybeSingle();
@@ -143,6 +149,29 @@ export async function DELETE(_request: Request, context: RouteContext) {
     }
     if (!existing) {
       return NextResponse.json({ error: "Document not found." }, { status: 404 });
+    }
+
+    if (!gate.isAdmin) {
+      const uploaderId = existing.uploaded_by_user_id
+        ? String(existing.uploaded_by_user_id)
+        : null;
+      if (!uploaderId || uploaderId !== gate.user.id) {
+        return NextResponse.json(
+          { error: "You can only delete documents you uploaded." },
+          { status: 403 }
+        );
+      }
+
+      const { data: membership } = await gate.authClient
+        .from("client_users")
+        .select("client_id")
+        .eq("user_id", gate.user.id)
+        .eq("client_id", clientId)
+        .maybeSingle();
+
+      if (!membership) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
     }
 
     const fileUrl = existing.file_url ? String(existing.file_url) : null;

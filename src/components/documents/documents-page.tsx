@@ -13,6 +13,7 @@ import {
   FolderOpen,
   Image as ImageIcon,
   Film,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -47,7 +48,7 @@ const MAX_BYTES = 15 * 1024 * 1024; // 15 MB
 
 export function DocumentsPage() {
   const { session } = useClientAuth();
-  const { clientId, client, documents, addDocument, updateDocument } =
+  const { clientId, client, documents, addDocument, updateDocument, deleteDocument } =
     useClientPortal();
   const [category, setCategory] = useState<DocumentCategory | "all">("all");
   const [uploading, setUploading] = useState(false);
@@ -63,6 +64,7 @@ export function DocumentsPage() {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNote, setEditNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = documents.filter(
@@ -183,12 +185,12 @@ export function DocumentsPage() {
     setUploading(false);
   }
 
-  function canEditDocument(doc: Document) {
+  function canManageOwnDocument(doc: Document) {
     return Boolean(session?.userId && doc.uploadedByUserId === session.userId);
   }
 
   function startEditNote(doc: Document) {
-    if (!canEditDocument(doc)) return;
+    if (!canManageOwnDocument(doc)) return;
     setEditingNoteId(doc.id);
     setEditNote(doc.description ?? "");
     setError(null);
@@ -207,6 +209,17 @@ export function DocumentsPage() {
     }
     setEditingNoteId(null);
     setEditNote("");
+  }
+
+  async function handleDelete(doc: Document) {
+    if (!canManageOwnDocument(doc) || deletingId) return;
+    if (!window.confirm(`Delete “${doc.name}”? This cannot be undone.`)) return;
+
+    setDeletingId(doc.id);
+    setError(null);
+    const result = await deleteDocument(doc.id);
+    setDeletingId(null);
+    if (!result.ok) setError(result.error);
   }
 
   const pickKind = file ? getDocumentMediaKind(file.type, file.name) : "other";
@@ -365,12 +378,12 @@ export function DocumentsPage() {
                             <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted-foreground">
                               {doc.description}
                             </p>
-                          ) : canEditDocument(doc) ? (
+                          ) : canManageOwnDocument(doc) ? (
                             <p className="min-w-0 flex-1 text-[13px] text-muted-foreground/70">
                               No note yet
                             </p>
                           ) : null}
-                          {canEditDocument(doc) && (
+                          {canManageOwnDocument(doc) && (
                             <button
                               type="button"
                               className="shrink-0 rounded-full p-1.5 text-muted-foreground transition-opacity hover:text-foreground md:opacity-0 md:group-hover/doc:opacity-100"
@@ -402,7 +415,11 @@ export function DocumentsPage() {
                   <div
                     className={cn(
                       "grid shrink-0 gap-2 sm:flex sm:items-center",
-                      showView ? "grid-cols-2" : "grid-cols-1"
+                      showView && canManageOwnDocument(doc)
+                        ? "grid-cols-3"
+                        : showView || canManageOwnDocument(doc)
+                          ? "grid-cols-2"
+                          : "grid-cols-1"
                     )}
                   >
                     {doc.fileUrl && (
@@ -429,6 +446,23 @@ export function DocumentsPage() {
                       >
                         <Eye className="mr-1.5 h-3.5 w-3.5" />
                         View
+                      </Button>
+                    )}
+                    {canManageOwnDocument(doc) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 w-full rounded-xl text-red-600 hover:bg-red-500/10 hover:text-red-700 sm:w-auto"
+                        disabled={deletingId === doc.id}
+                        onClick={() => void handleDelete(doc)}
+                      >
+                        {deletingId === doc.id ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        Delete
                       </Button>
                     )}
                   </div>

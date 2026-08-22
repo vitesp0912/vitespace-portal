@@ -40,6 +40,54 @@ type ClientAuthContextValue = {
 
 const ClientAuthContext = createContext<ClientAuthContextValue | null>(null);
 
+const ACCESS_CACHE_KEY = "vitespace.portal.access";
+
+type AccessCache = {
+  userId: string;
+  clientId: string | null;
+  isAdmin: boolean;
+  displayName: string | null;
+  role: string | null;
+};
+
+function readAccessCache(userId: string): AccessCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(ACCESS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AccessCache;
+    if (parsed?.userId !== userId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeAccessCache(session: ClientSession) {
+  if (typeof window === "undefined") return;
+  try {
+    const payload: AccessCache = {
+      userId: session.userId,
+      clientId: session.clientId,
+      isAdmin: session.isAdmin,
+      displayName: session.displayName?.trim() || null,
+      role: session.role ?? null,
+    };
+    window.localStorage.setItem(ACCESS_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function clearAccessCache() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(ACCESS_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 function sessionFromAccess(
   authUser: User,
   access: {
@@ -51,6 +99,11 @@ function sessionFromAccess(
 ): ClientSession | null {
   const email = authUser.email ?? "";
   const admin = isAdminEmail(email);
+  const cached = readAccessCache(authUser.id);
+  const displayName =
+    access.displayName?.trim() ||
+    cached?.displayName?.trim() ||
+    null;
 
   if (admin) {
     return {
@@ -58,8 +111,8 @@ function sessionFromAccess(
       userId: authUser.id,
       isAdmin: true,
       clientId: access.clientId,
-      displayName: access.displayName,
-      role: access.role,
+      displayName,
+      role: access.role ?? cached?.role ?? null,
     };
   }
 
@@ -70,8 +123,8 @@ function sessionFromAccess(
     userId: authUser.id,
     isAdmin: false,
     clientId: access.clientId,
-    displayName: access.displayName,
-    role: access.role,
+    displayName,
+    role: access.role ?? cached?.role ?? null,
   };
 }
 
@@ -93,6 +146,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       setUser(null);
       setSession(null);
       setPreview(null);
+      clearAccessCache();
       return null;
     }
 
@@ -102,11 +156,13 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       setUser(null);
       setSession(null);
       setPreview(null);
+      clearAccessCache();
       return null;
     }
 
     setUser(authUser);
     setSession(next);
+    writeAccessCache(next);
     return next;
   }, []);
 
@@ -117,6 +173,23 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
     supabase.auth.getUser().then(async ({ data }) => {
       if (!mounted) return;
       if (data.user) {
+        // Paint cached name immediately so overview never flashes email → name
+        const cached = readAccessCache(data.user.id);
+        if (cached?.displayName) {
+          const email = data.user.email ?? "";
+          const admin = isAdminEmail(email);
+          if (admin || cached.clientId) {
+            setUser(data.user);
+            setSession({
+              email,
+              userId: data.user.id,
+              isAdmin: admin || cached.isAdmin,
+              clientId: admin ? cached.clientId : cached.clientId,
+              displayName: cached.displayName,
+              role: cached.role,
+            });
+          }
+        }
         try {
           await buildSession(data.user);
         } catch {
@@ -134,6 +207,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
         setUser(null);
         setSession(null);
         setPreview(null);
+        clearAccessCache();
         return;
       }
       void buildSession(authSession.user);
@@ -162,10 +236,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
 
       try {
         const access = await resolveUserAccess(supabase, data.user.id);
-        const next = sessionFromAccess(data.user, {
-          clientId: access.clientId,
-          isAdmin: access.isAdmin,
-        });
+        const next = sessionFromAccess(data.user, access);
 
         if (wantsAdmin) {
           if (!next?.isAdmin || !isAdminEmail(data.user.email)) {
@@ -190,6 +261,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
 
         setUser(data.user);
         setSession(next);
+        writeAccessCache(next);
         setPreview(null);
         return { ok: true, clientId: next.clientId, isAdmin: next.isAdmin };
       } catch (e) {
@@ -212,6 +284,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
     setPreview(null);
     setSession(null);
     setUser(null);
+    clearAccessCache();
     await supabase.auth.signOut();
   }, []);
 
