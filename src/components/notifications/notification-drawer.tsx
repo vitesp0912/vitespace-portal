@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bell, CheckCheck, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,53 +13,77 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { formatUnreadBadge } from "@/lib/message-thread-view";
 import {
   formatNotificationTime,
   groupNotificationsByDate,
   resolveNotificationVisual,
 } from "@/lib/notification-ui";
-import { formatUnreadBadge } from "@/lib/message-thread-view";
 import { cn } from "@/lib/utils";
 import type { Notification } from "@/types";
 
+function seenStorageKey(clientId: string) {
+  return `vitespace-notif-seen:${clientId}`;
+}
+
+function loadSeenIds(clientId: string): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(seenStorageKey(clientId));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((id): id is string => typeof id === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSeenIds(clientId: string, ids: Set<string>) {
+  try {
+    localStorage.setItem(seenStorageKey(clientId), JSON.stringify([...ids]));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 type NotificationDrawerProps = {
+  clientId: string;
   notifications: Notification[];
-  onMarkAllRead?: () => void;
 };
 
 export function NotificationDrawer({
+  clientId,
   notifications,
-  onMarkAllRead,
 }: NotificationDrawerProps) {
   const [open, setOpen] = useState(false);
+  const [seenIds, setSeenIds] = useState<Set<string>>(() => new Set());
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
+  useEffect(() => {
+    setSeenIds(loadSeenIds(clientId));
+  }, [clientId]);
+
+  const newCount = useMemo(
+    () => notifications.filter((n) => !seenIds.has(n.id)).length,
+    [notifications, seenIds]
   );
-  const unreadLabel = formatUnreadBadge(unreadCount);
+  const countLabel = formatUnreadBadge(newCount);
 
   const groups = useMemo(
     () => groupNotificationsByDate(notifications),
     [notifications]
   );
 
-  function markAllRead() {
-    if (unreadCount > 0) onMarkAllRead?.();
-  }
-
   function handleOpenChange(next: boolean) {
-    // Clear badge as soon as the drawer opens (per-user cursor).
-    // Also mark on close so Link navigation / late arrivals are covered.
-    if (next || open) {
-      markAllRead();
-    }
     setOpen(next);
-  }
+    if (!next) return;
 
-  function handleClose() {
-    markAllRead();
-    setOpen(false);
+    setSeenIds((prev) => {
+      const merged = new Set(prev);
+      for (const n of notifications) merged.add(n.id);
+      saveSeenIds(clientId, merged);
+      return merged;
+    });
   }
 
   return (
@@ -71,19 +95,19 @@ export function NotificationDrawer({
             size="icon-sm"
             className="relative rounded-lg text-muted-foreground hover:text-foreground"
             aria-label={
-              unreadLabel
-                ? `Notifications, ${unreadLabel} unread`
+              newCount > 0
+                ? `Notifications, ${newCount} new`
                 : "Notifications"
             }
           />
         }
       >
         <Bell className="h-[18px] w-[18px]" />
-        {unreadLabel ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold leading-none text-white">
-            {unreadLabel}
+        {countLabel && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[9px] font-bold text-white">
+            {countLabel}
           </span>
-        ) : null}
+        )}
       </SheetTrigger>
 
       <SheetContent
@@ -147,7 +171,7 @@ export function NotificationDrawer({
                       <NotificationItem
                         key={notification.id}
                         notification={notification}
-                        onSelect={handleClose}
+                        onSelect={() => setOpen(false)}
                       />
                     ))}
                   </ul>
@@ -178,30 +202,21 @@ function NotificationItem({
         onClick={onSelect}
         className={cn(
           "group flex gap-3 rounded-xl px-2.5 py-2.5 transition-colors outline-none",
-          "hover:bg-[#F8F7FF] focus-visible:ring-2 focus-visible:ring-ring/50",
-          !notification.read && "bg-brand/[0.04]"
+          "hover:bg-[#F8F7FF] focus-visible:ring-2 focus-visible:ring-ring/50"
         )}
       >
         <span
           className={cn(
-            "relative mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]",
+            "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]",
             visual.iconClass
           )}
         >
           <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          {!notification.read ? (
-            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-brand ring-2 ring-surface" />
-          ) : null}
         </span>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p
-              className={cn(
-                "line-clamp-1 text-[14px] leading-snug text-foreground",
-                !notification.read ? "font-semibold" : "font-medium"
-              )}
-            >
+            <p className="line-clamp-1 text-[14px] font-medium leading-snug text-foreground">
               {notification.title}
             </p>
             <time

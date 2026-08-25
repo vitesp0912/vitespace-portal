@@ -9,6 +9,7 @@ import {
   deleteReplacedR2Object,
   type R2FolderKind,
 } from "@/lib/r2";
+import { queuePortalAlert } from "@/lib/email/dispatch";
 
 export const runtime = "nodejs";
 
@@ -262,6 +263,17 @@ export async function POST(request: Request, context: RouteContext) {
         console.error("Failed to delete previous invoice file from R2:", r2Err);
       }
 
+      queuePortalAlert({
+        clientId,
+        audience: "owners",
+        kind: "invoice",
+        title: "New invoice ready",
+        detail: `${(title || "Invoice").trim()}${
+          number ? ` · ${number.trim()}` : ""
+        } — please review it in the portal.`,
+        path: "/invoices",
+      });
+
       return NextResponse.json({
         ok: true,
         kind,
@@ -383,6 +395,28 @@ export async function POST(request: Request, context: RouteContext) {
           },
           { status: 502 }
         );
+      }
+    }
+
+    if (!asLogo) {
+      if (uploadedBy === "vitespace") {
+        queuePortalAlert({
+          clientId,
+          audience: "owners",
+          kind: "document",
+          title: "New document uploaded",
+          detail: `${displayName} is available in your portal.`,
+          path: "/documents",
+        });
+      } else {
+        queuePortalAlert({
+          clientId,
+          audience: "vitespace",
+          kind: "document",
+          title: "Client uploaded a document",
+          detail: `${displayName} was uploaded by the client.`,
+          path: `/admin/clients/${clientId}/documents`,
+        });
       }
     }
 

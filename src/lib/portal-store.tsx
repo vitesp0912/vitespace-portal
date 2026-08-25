@@ -33,6 +33,7 @@ import type {
 import { createClient } from "@/lib/supabase/client";
 import { fetchPortalSnapshot } from "@/lib/supabase/data";
 import { taskInclusiveDays, taskToWorkItem, workItemToTaskInsert } from "@/lib/tasks";
+import { queueClientAlertEmail } from "@/lib/email/client-queue";
 
 export interface PortalState {
   clients: Client[];
@@ -633,6 +634,25 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
 
       patch((s) => ({ ...s, workItems: [item, ...s.workItems] }));
       touchClientUpdated(clientId);
+
+      if (createdBy === "vitespace" && !item.parentId) {
+        queueClientAlertEmail(clientId, {
+          audience: "owners",
+          kind: "progress",
+          title: "Progress update",
+          detail: `${item.title} was added — please check Progress in the portal.`,
+          path: "/progress",
+        });
+      } else if (createdBy === "client" && !item.parentId) {
+        queueClientAlertEmail(clientId, {
+          audience: "vitespace",
+          kind: "progress",
+          title: "Client requested work",
+          detail: `${item.title} was submitted by the client.`,
+          path: `/admin/clients/${clientId}/work`,
+        });
+      }
+
       return { ok: true, item };
     },
     [patch, state.services, touchClientUpdated]
@@ -732,6 +752,21 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         ...s,
         workItems: s.workItems.map((item) => (item.id === id ? next : item)),
       }));
+
+      if (
+        !next.parentId &&
+        existing.status !== "completed" &&
+        next.status === "completed"
+      ) {
+        queueClientAlertEmail(next.clientId, {
+          audience: "owners",
+          kind: "progress",
+          title: "Work completed",
+          detail: `${next.title} is ready — please review it in Progress.`,
+          path: "/progress",
+        });
+      }
+
       return { ok: true };
     },
     [patch, state.workItems, state.services]
@@ -1550,11 +1585,30 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         id: uid("n"),
         client_id: clientId,
         recipient: sender === "client" ? "vitespace" : "client",
+        audience: sender === "client" ? "all" : "owners",
         title: "New message",
         message: msg.content.slice(0, 120),
         href: "/messages",
         read: false,
       });
+
+      if (sender === "client") {
+        queueClientAlertEmail(clientId, {
+          audience: "vitespace",
+          kind: "message",
+          title: "New client message",
+          detail: msg.content.slice(0, 160),
+          path: `/admin/clients/${clientId}/messages`,
+        });
+      } else {
+        queueClientAlertEmail(clientId, {
+          audience: "owners",
+          kind: "message",
+          title: "New message from Vitespace",
+          detail: msg.content.slice(0, 160),
+          path: "/messages",
+        });
+      }
 
       return { ok: true, message: msg };
     },
@@ -1633,6 +1687,29 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         ...input,
       };
       patch((s) => ({ ...s, notifications: [n, ...s.notifications] }));
+
+      void createClient()
+        .from("notifications")
+        .insert({
+          id: n.id,
+          client_id: clientId,
+          recipient: "client",
+          audience: "owners",
+          title: n.title,
+          message: n.message,
+          href: n.href,
+          read: n.read,
+          created_at: n.timestamp,
+        });
+
+      queueClientAlertEmail(clientId, {
+        audience: "owners",
+        kind: "update",
+        title: n.title,
+        detail: n.message,
+        path: n.href || "/",
+      });
+
       return n;
     },
     [patch]
