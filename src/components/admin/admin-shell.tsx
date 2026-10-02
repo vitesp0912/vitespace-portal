@@ -15,6 +15,7 @@ import {
   FolderOpen,
   MessageSquare,
   Bell,
+  Wallet,
 } from "lucide-react";
 import {
   Select,
@@ -224,6 +225,9 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
   const { logout } = useClientAuth();
   const { getUnreadMessageCount } = usePortal();
   const isClientView = Boolean(clientId);
+  const isFinances =
+    pathname === "/admin/finances" || pathname.startsWith("/admin/finances/");
+  const isClientsHome = pathname === "/admin";
   const clientTabs = clientId ? CLIENT_SECTIONS(clientId) : [];
   const messagesHref = clientId
     ? `/admin/clients/${clientId}/messages`
@@ -267,13 +271,25 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
             href="/admin"
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
-              !isClientView
+              isClientsHome
                 ? "bg-brand/10 text-foreground ring-1 ring-brand/10"
                 : "text-sidebar-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <Building2 className="h-[18px] w-[18px] shrink-0 opacity-80" />
             All Clients
+          </Link>
+          <Link
+            href="/admin/finances"
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
+              isFinances
+                ? "bg-brand/10 text-foreground ring-1 ring-brand/10"
+                : "text-sidebar-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <Wallet className="h-[18px] w-[18px] shrink-0 opacity-80" />
+            Finances
           </Link>
 
           {isClientView && clientName && (
@@ -342,7 +358,7 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
           )}
           {isClientView && <span className="hidden text-muted-foreground/40 sm:inline">/</span>}
           <span className="min-w-0 truncate text-[14px] font-medium text-foreground">
-            {isClientView ? clientName : "Dashboard"}
+            {isClientView ? clientName : isFinances ? "Finances" : "Dashboard"}
           </span>
           {isMessagesPage && clientId && (
             <Suspense fallback={null}>
@@ -359,6 +375,37 @@ export function AdminShell({ clientId, clientName, children }: AdminShellProps) 
             <span className="hidden sm:inline">Sign out</span>
           </button>
         </header>
+
+        {!isClientView && (
+          <div className="border-b border-border/60 lg:hidden">
+            <div className="flex gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none]">
+              <Link
+                href="/admin"
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium whitespace-nowrap",
+                  isClientsHome
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground"
+                )}
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                All Clients
+              </Link>
+              <Link
+                href="/admin/finances"
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium whitespace-nowrap",
+                  isFinances
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground"
+                )}
+              >
+                <Wallet className="h-3.5 w-3.5" />
+                Finances
+              </Link>
+            </div>
+          </div>
+        )}
 
         {isClientView && (
           <div className="border-b border-border/60 lg:hidden">

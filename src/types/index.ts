@@ -25,6 +25,8 @@ export type ApprovalStatus = "pending" | "approved" | "changes_requested";
 
 export type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
 
+export type FinanceDirection = "incoming" | "outgoing";
+
 export type RoadmapStatus = "committed" | "in_progress" | "planned" | "proposed";
 
 export type DocumentCategory =
@@ -218,6 +220,25 @@ export interface Notification {
   timestamp: string;
   read: boolean;
   href: string;
+}
+
+export interface FinanceAccount {
+  id: string;
+  name: string;
+  balance: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceTransaction {
+  id: string;
+  accountId: string;
+  direction: FinanceDirection;
+  amount: number;
+  description: string | null;
+  occurredAt: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Computed dashboard stats for admin client list */
